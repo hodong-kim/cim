@@ -1,123 +1,23 @@
 Common Input Method
 ===================
 
-CIM stands for Common Input Method.
+Cim stands for Common input method.
 
-Input methods in Linux and BSD are fragmented.
-There are many input methods in Linux and BSD, such as XIM, Gtk-IM, Qt-IM, and
-Wayland-IM.
+Cim is currently in development.
+API is subject to change without notice.
+Please use it for testing purposes.
 
-A CIM project is a project to integrate these input methods.
-
-Already, the Gtk input method and the Qt input method are plugin methods, and
-it has already been proven that there is no problem for decades when these
-plugin methods are used for input.
-
-However, since the Gtk input method and Qt input method depend on Gtk and Qt,
-respectively, X-only, Java, Wayland-only, and console-only applications cannot
-use such Gtk and Qt input methods.
-
-So common input method was designed as C API, removing dependency on Gtk from
-Gtk input method.
-
-CIM is made with C API and has no dependencies, so it can be used in various
-computer languages and applications.
+Visit https://nimfsoft.art/cim for more information.
 
 
-How it works
-------------
+Contact
+-------
 
-cim.h contains interfaces and types.
-cim.c contains functions for applications to use input contexts.
-If necessary, we plan to separate the API required by the application and
-the API required by the input methods(IME).
-
-* Location of plugins
-
-Place the input method plugins implementing the CIM API as follows:
-
-/usr/lib/input.d/im-sample.so
-/usr/lib/input.d/im-nimf.so
-/usr/lib/input.d/im-ibus.so
-/usr/lib/input.d/im-uim.so
-/usr/lib/input.d/im-fcitx.so
-/usr/lib/input.d/im-kime.so
-
-* Symbolic link location for plugins
-
-It is recommended to select input plugins via a symbolic link rather than an
-environment variable. This is because an environment variable may not be set in
-some circumstances. Also, the symbolic link type makes it easier to create
-configurators.
-
-~/.config/cim.so is a symbolic link to the input method plugin like ibus,
-fcitx, nimf, kime, uim.
-
-ln -s /usr/lib/input.d/im-sample.so ~/.config/cim.so
-
-* Ready
-
-Now, when an application or GUI toolkit calls the CIM Input Context API, the
-input method(IME) works through the CIM API.
-
-/usr/lib/input.d/im-sample.so
-
-If you want to change the input method to fcitx, you can simply reset the
-symbolic link.
-
-ln -s /usr/lib/input.d/im-fcitx.so ~/.config/cim.so
-
-In this way, XIM, GTK-IM, QT-IM, Wayland-IM, etc. can be replaced and
-integrated. However, there is a problem that input is not possible in Snap
-or Flatpak. If various applications or GUI toolkits call CIM API, the input
-problem in snap or flatpak can be easily solved by accessing
-$HOME/.config/cim.so.
-
-
-Integration is practically possible.
-------------------------------------
-
-Even if applications such as Wayland, Snapak, or Flatpak, or GUI toolkits
-such as Gtk or Qt do not adopt CIM, the input methods can actually be
-integrated if the CIM project provides various bridges.
-
-If you use it like this, you need to set environment variables.
-
-QT_IM_MODULE="cim"
-GTK_IM_MODULE="cim"
-XMODIFIERS="@im=cim"
-
-The following plugins can call third-party input methods such as nimf, ibus,
-fcitx, uim, and kime via ~/.config/cim.so.
-
-/usr/local/lib/gtk-4.0/4.0.0/immodules/libim-cim-gtk4.so
-/usr/local/lib/gtk-2.0/2.10.0/immodules/im-cim-gtk2.so
-/usr/local/lib/gtk-3.0/3.0.0/immodules/im-cim-gtk3.so
-/usr/local/lib/qt5/plugins/platforminputcontexts/libqt5im-cim.so
-/usr/local/lib/qt6/plugins/platforminputcontexts/libqt6im-cim.so
-cim-xim.so
-cim-wayland.so
-
-Really technically this is possible.
-However, Flatpak and Snap applications can use the input method through
-~/.config/cim.so. If it is not possible, you will have to ask the developers of
-Flatpak and Snap.
-
-We did not suffer from input problems even in the DOS days of the 20th century,
-so why do we have to suffer from input problems in Linux and BSD
-in the cutting-edge era of the 21st century?
-
-
-Project adderess
-----------------
-
-https://github.com/hodong-kim/cim
+Email: hodong@nimfsoft.art
 
 
 License
 -------
-
-0BSD
 
 Copyright (C) 2023 Hodong Kim <hodong@nimfsoft.art>
 

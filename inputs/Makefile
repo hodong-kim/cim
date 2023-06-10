@@ -1,6 +1,6 @@
-include ./config.mk
+include ../config.mk
 
-SUBDIRS = libcim inputs samples tests
+SUBDIRS = gtk3
 
 all:
 	for subdir in $(SUBDIRS); do \
@@ -21,4 +21,3 @@ clean:
 	for subdir in $(SUBDIRS); do \
 	  $(MAKE) clean -C $$subdir || exit 1; \
 	done
-	rm -f config.mk

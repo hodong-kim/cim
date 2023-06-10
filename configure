@@ -1,0 +1,168 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+require 'fileutils'
+
+# default variables
+version           = "2023.06.10"
+prefix            = "/usr/local"
+extra_cflags      = "-Wall -Werror -std=c2x"
+extra_ldflags     = "-Wl,-z,relro"
+hardening         = "-D_FORTIFY_SOURCE=2 -O1"
+debug             = ""
+libdir            = ""
+
+parser = OptionParser.new
+parser.banner = "Usage: ./configure [OPTION]..."
+
+parser.on("--help", "Show help messages") do
+  puts parser
+  exit
+end
+
+parser.on("--debug", "Enable debug options") do
+  debug="-DDEBUG -g"
+end
+
+parser.on("--disable-hardening", "Disable hardening") do
+  hardening = ""
+end
+
+parser.on("--prefix=DIRECTORY", "Set DIRECTORY to prefix") do |dir|
+  prefix=dir
+end
+
+parser.on("--libdir=PATH", "Set PATH to libdir") do |path|
+  libdir=path
+end
+
+begin
+  parser.parse!
+rescue OptionParser::MissingArgument => error
+  puts error.message
+  puts parser
+end
+
+if libdir.empty?
+  libdir="#{prefix}/lib"
+end
+
+case `uname`.chomp
+when "FreeBSD"
+  pkgconfig_dir ="#{prefix}/libdata/pkgconfig"
+  intl_ldflag   ="-L#{libdir} -lintl"
+  intl_cflag    ="-I#{prefix}/include"
+  dl_ldflag     =""
+else
+  pkgconfig_dir ="#{libdir}/pkgconfig"
+  intl_ldflag   =""
+  intl_cflag    =""
+  dl_ldflag     ="-ldl"
+end
+
+extra_cflags="#{extra_cflags} #{hardening} #{debug}"
+errmsg=""
+
+# check required packages
+
+make=`which make 2> /dev/null`.chomp
+
+if make.empty?
+  make=`which bmake 2> /dev/null`.chomp
+end
+
+if make.empty?
+  errmsg += " make"
+end
+
+cc=`which clang 2> /dev/null`.chomp
+
+if cc.empty?
+  cc=`which cc 2> /dev/null`.chomp
+end
+
+if cc.empty?
+  errmsg += " cc"
+end
+
+# check pkg-config
+
+if `which pkg-config`.chomp.empty?
+  puts "pkg-config not found."
+  puts "FreeBSD:    pkg install pkgconf"
+  puts "Debian:     apt install pkgconf"
+  puts "Arch Linux: pacman -S pkgconf"
+  exit 1
+end
+
+if ! system("pkg-config --exists glib-2.0");    errmsg += " glib-2.0";    end
+if ! system("pkg-config --exists gio-2.0");     errmsg += " gio-2.0";     end
+if ! system("pkg-config --exists gobject-2.0"); errmsg += " gobject-2.0"; end
+if ! system("pkg-config --exists gtk+-3.0");    errmsg += " gtk+-3.0";    end
+if ! system("pkg-config --exists pango");       errmsg += " pango";       end
+if ! system("pkg-config --exists libhangul");   errmsg += " libhangul";   end
+
+gtk3_libdir = `pkg-config --variable=libdir gtk+-3.0`.chomp
+
+path="PATH=$PATH:#{gtk3_libdir}/libgtk-3-0"
+
+case `uname -m`.chomp
+  when "x86_64", "amd64", "aarch64"
+    bit = 64
+  else
+    bit = 32
+end
+
+gtk_query_immodules3=`#{path} which gtk-query-immodules-3.0 2> /dev/null`.chomp
+
+if gtk_query_immodules3.empty?
+  gtk_query_immodules3=`#{path} which gtk-query-immodules-3.0-#{bit}`.chomp
+end
+
+if gtk_query_immodules3.empty?
+  errmsg += " gtk-query-immodules-3.0"
+end
+
+# print error messages
+
+if not errmsg.empty?
+  puts "Not found: #{errmsg}"
+  exit 1
+end
+
+libcim_major = 0
+libcim_minor = 0
+libcim_micro = 0
+
+# generate config.mk
+
+File.open("config.mk", "w") do |file|
+file.puts("MAKE                     = #{make}
+CC                   = #{cc}
+EXTRA_CFLAGS         = #{extra_cflags}
+EXTRA_LDFLAGS        = #{extra_ldflags}
+VERSION              = #{version}
+top_srcdir           = #{`pwd`.chomp}
+prefix               = #{prefix}
+libdir               = #{libdir}
+datadir              = #{prefix}/share
+PKGCONFIG_DIR        = #{pkgconfig_dir}
+GETTEXT_PACKAGE      = cim
+CIM_LOCALE_DIR       = #{prefix}/share/locale
+MKDIR_P              = mkdir -p
+LIBCIM_MAJOR         = #{libcim_major}
+LIBCIM_MINOR         = #{libcim_minor}
+LIBCIM_MICRO         = #{libcim_micro}
+LIBCIM_VERSION       = #{libcim_major}.#{libcim_minor}.#{libcim_micro}
+GTK3_LIBDIR          = #{gtk3_libdir}
+GTK_QUERY_IMMODULES3 = #{gtk_query_immodules3}
+INPUT_D_DIR          = #{libdir}/input.d
+INTL_LDFLAG          = #{intl_ldflag}
+INTL_CFLAG           = #{intl_cflag}
+DL_LDFLAG            = #{dl_ldflag}")
+end
+
+puts "Generated config.mk"
+puts "----------------------------------------------------------------"
+File.readlines("config.mk").each { |line| puts line }
+puts "----------------------------------------------------------------"
