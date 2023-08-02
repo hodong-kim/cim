@@ -3,7 +3,7 @@
  * c-macros.h
  * This file is part of Clair.
  *
- * Copyright (C) 2019-2021 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2019-2023 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -36,12 +36,13 @@
   #define N_(text)  (text) /* only mark for translation */
 #endif
 
-#define C_N_ELEMENTS(arr)  (sizeof (arr) / sizeof ((arr)[0]))
-
-#ifndef nullptr
-  #ifndef __cplusplus
-    #define nullptr ((void*) 0)
-  #endif
+#ifndef __cplusplus
+#if (defined(__GNUC__) && (GCC_VERSION < 13)) || \
+    (defined(__clang__) && (__clang_major__ < 16))
+#define nullptr ((void*) 0)
 #endif
+#endif
+
+#define C_N_ELEMENTS(arr)  (sizeof (arr) / sizeof ((arr)[0]))
 
 #endif /* __C_MACROS_H__ */

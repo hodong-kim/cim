@@ -43,8 +43,11 @@ CArray *c_array_new (CFreeFunc free_func, bool free_data)
   return (CArray *) array;
 }
 
-void **c_array_free (CArray *array)
+void** c_array_free (CArray *array)
 {
+  if (array == nullptr)
+    return nullptr;
+
   CArrayPrivate *priv = (CArrayPrivate *) array;
 
   if (priv->free_data)

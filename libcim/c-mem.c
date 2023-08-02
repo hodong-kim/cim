@@ -3,7 +3,7 @@
  * c-mem.c
  * This file is part of Clair.
  *
- * Copyright (C) 2021,2022 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2021-2023 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -37,8 +37,8 @@ void* c_malloc (size_t size)
 
 void* c_calloc (size_t number, size_t size)
 {
-  if (!(number * size))
-    return NULL;
+  if (!number || !size)
+    return nullptr;
 
   void* mem = calloc (number, size);
 

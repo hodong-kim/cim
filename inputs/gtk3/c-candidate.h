@@ -49,13 +49,23 @@ void       table_item_deselect (TableItem* item);
 
 #include <stdbool.h>
 
+#if (defined(__GNUC__) && (GCC_VERSION < 13)) || \
+    (defined(__clang__) && (__clang_major__ < 16))
+enum _CCandidateCbType {
+  C_CANDIDATE_CB_CHANGE_PAGE,
+  C_CANDIDATE_CB_ACTIVATE_ITEM,
+  C_CANDIDATE_CB_N_TYPES
+};
+typedef int CCandidateCbType;
+#else
 enum _CCandidateCbType : int {
   C_CANDIDATE_CB_CHANGE_PAGE,
   C_CANDIDATE_CB_ACTIVATE_ITEM,
   C_CANDIDATE_CB_N_TYPES
 };
+typedef enum _CCandidateCbType CCandidateCbType;
+#endif
 
-typedef enum   _CCandidateCbType     CCandidateCbType;
 typedef struct _CCandidate           CCandidate;
 typedef struct _CCandidateCallbacks  CCandidateCallbacks;
 

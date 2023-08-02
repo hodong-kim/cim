@@ -49,7 +49,7 @@ extern "C" {
  */
 #define CIM_MAJOR_VERSION 0
 #define CIM_MINOR_VERSION 0
-#define CIM_MICRO_VERSION 0
+#define CIM_MICRO_VERSION 1
 
 enum _CimEventType {
   CIM_EVENT_KEY_PRESS   = 0, /* This means that the key has been pressed. */
@@ -138,6 +138,23 @@ struct _CimSelection {
   int end_col;
 };
 
+#if (defined(__GNUC__) && (GCC_VERSION < 13)) || \
+    (defined(__clang__) && (__clang_major__ < 16))
+enum _CimCbType {
+  CIM_CB_PREEDIT_START,
+  CIM_CB_PREEDIT_END,
+  CIM_CB_PREEDIT_CHANGED,
+  CIM_CB_COMMIT,
+  CIM_CB_GET_SURROUND,
+  CIM_CB_DELETE_SURROUND,
+  CIM_CB_CANDIDATE_SHOW,
+  CIM_CB_CANDIDATE_HIDE,
+  CIM_CB_CANDIDATE_CHANGED,
+  CIM_CB_CANDIDATE_SELECTED,
+  CIM_CB_N_TYPES
+};
+typedef int CimCbType;
+#else
 enum _CimCbType : int {
   CIM_CB_PREEDIT_START,
   CIM_CB_PREEDIT_END,
@@ -152,6 +169,7 @@ enum _CimCbType : int {
   CIM_CB_N_TYPES
 };
 typedef enum _CimCbType CimCbType;
+#endif
 
 enum _CimCbMask {
   CIM_CB_PREEDIT_START_MASK      = 1 << CIM_CB_PREEDIT_START,

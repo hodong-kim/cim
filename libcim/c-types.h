@@ -28,6 +28,7 @@ typedef void (* CFreeFunc)     (void *data);
 typedef int  (* CCompareFunc)  (const void *a, const void *b);
 typedef bool (* CEqualFunc)    (const void *a, const void *b);
 typedef void (* CCallback)     ();
+typedef void (* CCallback1)    (void*);
 
 typedef struct _CNode  CNode;
 struct _CNode {

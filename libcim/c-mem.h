@@ -3,7 +3,7 @@
  * c-mem.h
  * This file is part of Clair.
  *
- * Copyright (C) 2021,2022 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2021-2023 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -28,9 +28,9 @@ C_BEGIN_DECLS
 
 typedef struct
 {
-  uint8_t   *data;
-  unsigned   count;
-  CFreeFunc  free_func;
+  uint8_t*  data;
+  int       count;
+  CFreeFunc free_func;
 } CRef;
 
 CRef *c_ref_new (uint8_t *data, CFreeFunc free_func);

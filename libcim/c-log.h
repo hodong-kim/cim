@@ -40,12 +40,14 @@ C_BEGIN_DECLS
   c_log (LOG_WARNING, __FILE__ ":%d:%s: " format, \
          __LINE__, __PRETTY_FUNCTION__, ## __VA_ARGS__)
 
-#define c_log_info(format, ...) \
-  c_log (LOG_INFO, format, ## __VA_ARGS__)
+#define c_log_info(format, ...)  c_log (LOG_INFO, format, ## __VA_ARGS__)
 
-#define c_log_debug(format, ...) \
-  c_log (LOG_DEBUG, __FILE__ ":%d:%s: " format, \
-         __LINE__, __PRETTY_FUNCTION__, ## __VA_ARGS__)
+#ifdef DEBUG
+  #define c_log_debug(format, ...) \
+    c_log (LOG_DEBUG, __FILE__ ":%d: " format, __LINE__, ## __VA_ARGS__)
+#else
+  #define c_log_debug(format, ...)  ((void) 0)
+#endif
 
 void c_log (int priority, const char* format, ...);
 
