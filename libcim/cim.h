@@ -3,7 +3,7 @@
  * cim.h
  * This file is part of Cim.
  *
- * Copyright (C) 2023 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2023,2024 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -47,11 +47,11 @@ extern "C" {
  *
  *     micro = micro + 1
  */
-#define CIM_MAJOR_VERSION 0
-#define CIM_MINOR_VERSION 0
-#define CIM_MICRO_VERSION 1
+#define CIM_MAJOR_VERSION  1
+#define CIM_MINOR_VERSION  0
+#define CIM_MICRO_VERSION  0
 
-enum _CimEventType {
+enum _CimEventType : int32_t {
   CIM_EVENT_KEY_PRESS   = 0, /* This means that the key has been pressed. */
   CIM_EVENT_KEY_RELEASE = 1  /* This means that the key has been released. */
 };
@@ -65,7 +65,7 @@ struct _CimEvent {
   uint32_t     keycode;
 };
 
-enum _CimTextAttrType {
+enum _CimTextAttrType : int {
   CIM_TEXT_ATTR_UNDERLINE,
   CIM_TEXT_ATTR_HIGHLIGHT
 };
@@ -102,7 +102,7 @@ struct _CimRect {
   int height;
 };
 
-enum _CimItemType {
+enum _CimItemType : int {
   CIM_ITEM_STRING,
   CIM_ITEM_N_TYPES
 };
@@ -245,7 +245,7 @@ struct _CimIc {
 };
 
 /* Returns a newly allocated CimIc. Free it with cim_ic_free */
-CimIc* cim_ic_new ();
+CimIc* cim_ic_new (void);
 void   cim_ic_free           (CimIc* ic);
 void   cim_ic_focus_in       (CimIc* ic);
 void   cim_ic_focus_out      (CimIc* ic);
@@ -264,7 +264,7 @@ const CimCandidate* cim_ic_get_candidate (CimIc* ic);
 void  cim_ic_activate_candidate_item (CimIc* ic, int row, int col);
 void  cim_ic_change_candidate_page   (CimIc* ic, int page_index);
 /* utility functions */
-char* cim_get_cim_so_path ();
+char* cim_get_cim_so_path (void);
 
 /*
  * The cim plugin must implement the following functions.

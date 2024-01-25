@@ -3,7 +3,7 @@
  * c-array.h
  * This file is part of Clair.
  *
- * Copyright (C) 2021,2022 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2021-2024 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -27,22 +27,22 @@ C_BEGIN_DECLS
 
 typedef struct _CArray CArray;
 struct _CArray {
-  void     **data;
-  unsigned   len;
+  void** data;
+  int    len;
 };
 
-CArray *c_array_new          (CFreeFunc free_func, bool free_data);
-void  **c_array_free         (CArray *array);
-void    c_array_clear        (CArray *array);
-void    c_array_add          (CArray *array, void *data);
-bool    c_array_remove_index (CArray *array, unsigned i);
-bool    c_array_remove       (CArray *array, void *data);
-void   *c_array_index        (CArray *array, unsigned i);
-void    c_array_sort         (CArray *array, CCompareFunc compare);
-bool    c_array_find         (CArray     *array,
-                              const void *needle,
+CArray* c_array_new          (CFreeFunc free_func, bool free_data);
+void**  c_array_free         (CArray* array);
+void    c_array_clear        (CArray* array);
+void    c_array_add          (CArray* array, void* data);
+bool    c_array_remove_index (CArray* array, int i);
+bool    c_array_remove       (CArray* array, void* data);
+void   *c_array_index        (CArray* array, int i);
+void    c_array_sort         (CArray* array, CCompareFunc compare);
+bool    c_array_find         (CArray*     array,
+                              const void* needle,
                               CEqualFunc  equal_func,
-                              unsigned   *index);
+                              int*        index);
 C_END_DECLS
 
-#endif /* __C_ARRAY_H__ */
+#endif // __C_ARRAY_H__

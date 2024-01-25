@@ -3,7 +3,7 @@
  * im-libhangul.c
  * This file is part of Cim.
  *
- * Copyright (C) 2023 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2023,2024 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -392,8 +392,6 @@ static void hangul_call_candidate_selected (Hangul* hangul)
   if (hangul->cb.candidate_selected)
   {
     hangul->selection.end_row = hangul->selection.start_row;
-    hangul->selection.end_col = hangul->candidate.n_cols - 1;
-
     hangul->cb.candidate_selected ((CimIc*) hangul, &hangul->selection,
                                    hangul->cb_user_data[CIM_CB_CANDIDATE_SELECTED]);
   }
@@ -1013,7 +1011,8 @@ static CimIc* hangul_new ()
     hangul->candidate.table[i] = c_calloc (N_COLS, sizeof (CimItem));
 
   hangul->candidate.page_index = 0;
-  hangul->candidate.n_cols = N_COLS;
+  hangul->candidate.n_cols  = N_COLS;
+  hangul->selection.end_col = N_COLS - 1;
 
   hangul->hanja_key1.keyval = CIM_KEY_Hangul_Hanja;
   hangul->hanja_key2.keyval = CIM_KEY_Control_R;

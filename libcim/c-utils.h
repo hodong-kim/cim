@@ -27,9 +27,9 @@
 
 C_BEGIN_DECLS
 
-uid_t       c_get_loginuid ();
-const char *c_get_user_home_dir   ();
-char       *c_get_user_config_dir ();
+uid_t       c_get_loginuid (void);
+const char *c_get_user_home_dir   (void);
+char       *c_get_user_config_dir (void);
 bool        c_mkdir_p (const char *pathname, mode_t mode);
 
 C_END_DECLS

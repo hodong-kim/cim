@@ -3,7 +3,7 @@
  * c-types.h
  * This file is part of Clair.
  *
- * Copyright (C) 2021,2022 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2021-2024 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -24,11 +24,11 @@
 
 C_BEGIN_DECLS
 
-typedef void (* CFreeFunc)     (void *data);
-typedef int  (* CCompareFunc)  (const void *a, const void *b);
-typedef bool (* CEqualFunc)    (const void *a, const void *b);
-typedef void (* CCallback)     ();
-typedef void (* CCallback1)    (void*);
+typedef void (*CFreeFunc)     (void *data);
+typedef int  (*CCompareFunc)  (const void *a, const void *b);
+typedef bool (*CEqualFunc)    (const void *a, const void *b);
+typedef void (*CCallback)     ();
+typedef void (*CCallback1)    (void*);
 
 typedef struct _CNode  CNode;
 struct _CNode {

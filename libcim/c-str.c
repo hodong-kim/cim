@@ -3,7 +3,7 @@
  * c-str.c
  * This file is part of Clair.
  *
- * Copyright (C) 2020-2023 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2020-2024 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -588,9 +588,9 @@ char *c_char32_to_utf8 (const char32_t *char32, ssize_t n_char32s)
   return c_realloc (utf8, len + 1);
 }
 
-CString *c_string_new (const char *str, bool free_str)
+CString* c_string_new (const char* str, bool free_str)
 {
-  CString *string = c_malloc (sizeof (CString));
+  CString* string = c_malloc (sizeof (CString));
 
   string->capa     = C_STRING_DEFAULT_CAPA;
   string->str      = c_malloc (string->capa);
@@ -662,6 +662,13 @@ void c_string_assign (CString *string, const char *str)
   string->len = strlen (str);
   c_string_resize_capa (string, string->len + 1);
   memcpy (string->str, str, string->len + 1);
+}
+
+void c_string_assign_n (CString* string, const char* str, size_t n)
+{
+  c_string_resize_capa (string, n + 1);
+  memcpy (string->str, str, n);
+  string->str[n] = '\0';
 }
 
 void c_string_insert_c (CString *string, ssize_t pos, char c)

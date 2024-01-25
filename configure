@@ -4,7 +4,7 @@ require 'optparse'
 require 'fileutils'
 
 # default variables
-version           = "2023.08.02"
+version           = "2024.01.25"
 prefix            = "/usr/local"
 extra_cflags      = "-Wall -Werror -std=c2x"
 extra_ldflags     = "-Wl,-z,relro"
@@ -130,9 +130,9 @@ if not errmsg.empty?
   exit 1
 end
 
-libcim_major = 0
+libcim_major = 1
 libcim_minor = 0
-libcim_micro = 1
+libcim_micro = 0
 
 # generate config.mk
 

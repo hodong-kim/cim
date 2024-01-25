@@ -3,7 +3,7 @@
  * cim.c
  * This file is part of Cim.
  *
- * Copyright (C) 2023 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2023,2024 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -32,7 +32,7 @@ static atomic_uint cim_ref_count;
 
 /*
  * Returns the newly allocated cim.so path string on success,
- * or NULL on failure.
+ * or nullptr on failure.
  * Free it with free().
  */
 char* cim_get_cim_so_path ()
@@ -43,7 +43,7 @@ char* cim_get_cim_so_path ()
   conf_dir = c_get_user_config_dir ();
 
   if (!conf_dir)
-    return NULL;
+    return nullptr;
 
   path = c_str_join (conf_dir, "/cim.so", nullptr);
 
@@ -68,7 +68,7 @@ CimIc* cim_ic_new ()
 
     if (!cim_plugin)
     {
-      c_log_warning ("Faild to open cim plugin");
+      c_log_warning ("Faild to open cim plugin: %s", dlerror ());
       goto fallback;
     }
 
@@ -84,7 +84,7 @@ CimIc* cim_ic_new ()
     {
       int plugin_major;
 
-      cim_plugin_get_version (&plugin_major, NULL, NULL);
+      cim_plugin_get_version (&plugin_major, nullptr, nullptr);
 
       if (plugin_major == CIM_MAJOR_VERSION)
       {
@@ -112,9 +112,9 @@ CimIc* cim_ic_new ()
         c_log_warning ("Symbol not found: cim_plugin_free_ic");
 
       dlclose (cim_plugin);
-      cim_plugin         = NULL;
-      cim_plugin_new_ic  = NULL;
-      cim_plugin_free_ic = NULL;
+      cim_plugin         = nullptr;
+      cim_plugin_new_ic  = nullptr;
+      cim_plugin_free_ic = nullptr;
 
       goto fallback;
     }
@@ -142,9 +142,9 @@ void cim_ic_free (CimIc* ic)
     if (cim_plugin)
       dlclose (cim_plugin);
 
-    cim_plugin         = NULL;
-    cim_plugin_new_ic  = NULL;
-    cim_plugin_free_ic = NULL;
+    cim_plugin         = nullptr;
+    cim_plugin_new_ic  = nullptr;
+    cim_plugin_free_ic = nullptr;
   }
 }
 
@@ -200,7 +200,7 @@ const CimCandidate* cim_ic_get_candidate (CimIc* ic)
     return ic->get_candidate (ic);
 
   c_log_critical ("get_candidate() must be implemented in the IM plugin.");
-  return NULL;
+  return nullptr;
 }
 
 void cim_ic_set_callbacks (CimIc* ic, ...)

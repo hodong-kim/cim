@@ -3,7 +3,7 @@
  * c-str.h
  * This file is part of Clair.
  *
- * Copyright (C) 2020-2022 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2020-2024 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -63,27 +63,28 @@ char     *c_utf8_next_char  (const char *utf8);
 char     *c_utf8_offset_to_pointer (const char *utf8, size_t offset_in_chars);
 char     *c_char32_to_utf8  (const char32_t *char32, ssize_t n_char32s);
 int       c_char32_to_utf8_with_buf (char32_t char32, char *utf8);
-char32_t *c_utf8_to_char32  (const char *utf8);
-int       c_utf8_collate    (const char * restrict s1,
-                             const char * restrict s2);
+char32_t* c_utf8_to_char32  (const char* utf8);
+int       c_utf8_collate    (const char* restrict s1,
+                             const char* restrict s2);
 
 typedef struct _CString  CString;
 struct _CString {
-  char   *str;
-  size_t  len;
-  size_t  capa;
-  bool    free_str;
+  char*  str;
+  size_t len;
+  size_t capa;
+  bool   free_str;
 };
 
-CString *c_string_new       (const char *str, bool free_str);
-char    *c_string_free      (CString *string);
-void     c_string_append    (CString *string, const char *str);
-void     c_string_append_c  (CString *string, char c);
-void     c_string_assign    (CString *string, const char *str);
-void     c_string_insert_c  (CString *string, ssize_t pos, char c);
-void     c_string_erase     (CString *string, ssize_t pos, ssize_t len);
-void     c_string_insert    (CString *string, ssize_t pos, const char *str);
-void     c_string_overwrite (CString *string, size_t  pos, const char *str);
+CString* c_string_new       (const char* str, bool free_str);
+char*    c_string_free      (CString* string);
+void     c_string_append    (CString* string, const char* str);
+void     c_string_append_c  (CString* string, char c);
+void     c_string_assign    (CString* string, const char* str);
+void     c_string_assign_n  (CString* string, const char* str, size_t n);
+void     c_string_insert_c  (CString* string, ssize_t pos, char c);
+void     c_string_erase     (CString* string, ssize_t pos, ssize_t len);
+void     c_string_insert    (CString* string, ssize_t pos, const char* str);
+void     c_string_overwrite (CString* string, size_t  pos, const char* str);
 
 C_END_DECLS
 

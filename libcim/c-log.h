@@ -3,7 +3,7 @@
  * c-log.h
  * This file is part of Clair.
  *
- * Copyright (C) 2020-2023 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2020-2024 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -34,17 +34,19 @@ C_BEGIN_DECLS
 
 #define c_log_critical(format, ...) \
   c_log (LOG_CRIT, __FILE__ ":%d:%s: " format, \
-         __LINE__, __PRETTY_FUNCTION__, ## __VA_ARGS__)
+         __LINE__, __PRETTY_FUNCTION__ __VA_OPT__(,) __VA_ARGS__)
 
 #define c_log_warning(format, ...) \
   c_log (LOG_WARNING, __FILE__ ":%d:%s: " format, \
-         __LINE__, __PRETTY_FUNCTION__, ## __VA_ARGS__)
+         __LINE__, __PRETTY_FUNCTION__ __VA_OPT__(,) __VA_ARGS__)
 
-#define c_log_info(format, ...)  c_log (LOG_INFO, format, ## __VA_ARGS__)
+#define c_log_info(format, ...) \
+  c_log (LOG_INFO, format __VA_OPT__(,) __VA_ARGS__)
 
 #ifdef DEBUG
   #define c_log_debug(format, ...) \
-    c_log (LOG_DEBUG, __FILE__ ":%d: " format, __LINE__, ## __VA_ARGS__)
+    c_log (LOG_DEBUG, __FILE__ ":%d: " format, __LINE__ \
+           __VA_OPT__(,) __VA_ARGS__)
 #else
   #define c_log_debug(format, ...)  ((void) 0)
 #endif

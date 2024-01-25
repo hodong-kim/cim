@@ -3,7 +3,7 @@
  * c-progname.h
  * This file is part of Clair.
  *
- * Copyright (C) 2021 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2021-2023 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -23,7 +23,7 @@
 
 C_BEGIN_DECLS
 
-char *c_get_progname ();
+char *c_get_progname (void);
 
 C_END_DECLS
 
