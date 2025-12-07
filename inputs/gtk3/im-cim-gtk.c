@@ -3,7 +3,7 @@
  * im-cim-gtk.c
  * This file is part of Cim.
  *
- * Copyright (C) 2023 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2023-2025 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -21,6 +21,7 @@
 #include "cim.h"
 #include "c-macros.h"
 #include "c-candidate.h"
+#include "c-log.h"
 
 #define CIM_GIC(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), cim_gic_get_type (), CimGic))
 
@@ -31,7 +32,7 @@ struct _CimGic
 {
   GtkIMContext  parent_instance;
 
-  CimIc*        ic;
+  CimIcHandle   ic;
   GtkIMContext* simple;
   GdkWindow*    client_window;
   CimSurround   surround;
@@ -46,6 +47,8 @@ struct _CimGicClass
 };
 
 G_DEFINE_DYNAMIC_TYPE (CimGic, cim_gic, GTK_TYPE_IM_CONTEXT);
+
+static CimCallbacks callbacks;
 
 static gboolean cim_gic_filter_keypress (GtkIMContext* context, GdkEventKey* event)
 {
@@ -184,24 +187,26 @@ static void cim_gic_set_cursor_pos (GtkIMContext* context, GdkRectangle* area)
   cim_ic_set_cursor_pos (CIM_GIC (context)->ic, (const CimRect*) &gic->cursor_pos);
 }
 
-static void cb_preedit_start (CimIc* unused, CimGic* gic)
+static void cb_preedit_start (CimIcHandle unused, void* gic)
 {
   g_signal_emit_by_name (gic, "preedit-start");
 }
 
-static void cb_preedit_end (CimIc* unused, CimGic* gic)
+static void cb_preedit_end (CimIcHandle unused, void* gic)
 {
   g_signal_emit_by_name (gic, "preedit-end");
 }
 
-static void cb_preedit_changed (CimIc* unused1,
+static void cb_preedit_changed (CimIcHandle unused1,
                                 const CimPreedit* unused2,
-                                CimGic* gic)
+                                void* gic)
 {
   g_signal_emit_by_name (gic, "preedit-changed");
 }
 
-static void cb_change_page (CCandidate* ccandidate, int page_index, CimIc* ic)
+static void cb_change_page (CCandidate* ccandidate,
+                            int page_index,
+                            CimIcHandle ic)
 {
   cim_ic_change_candidate_page (ic, page_index);
 }
@@ -209,17 +214,19 @@ static void cb_change_page (CCandidate* ccandidate, int page_index, CimIc* ic)
 static void cb_activate_item (CCandidate* ccandidate,
                               int row,
                               int col,
-                              CimIc* ic)
+                              CimIcHandle ic)
 {
   cim_ic_activate_candidate_item (ic, row, col);
 }
 
-static void cb_candidate_show (CimIc* unused,
-                               int n_rows,
-                               int n_cols,
+static void cb_candidate_show (CimIcHandle unused,
+                               uint32_t n_rows,
+                               uint32_t n_cols,
                                bool show_aux,
-                               CimGic* gic)
+                               void* user_data)
 {
+  CimGic* gic =(CimGic*) user_data;
+
   if (!gic->ccandidate)
   {
     gic->ccandidate = c_candidate_new ();
@@ -234,23 +241,23 @@ static void cb_candidate_show (CimIc* unused,
                     gic->cursor_pos.y + gic->cursor_pos.height);
 }
 
-static void cb_candidate_hide (CimIc* unused, CimGic* gic)
+static void cb_candidate_hide (CimIcHandle unused, void* gic)
 {
-  c_candidate_hide (gic->ccandidate);
+  c_candidate_hide (((CimGic*) gic)->ccandidate);
 }
 
-static void cb_candidate_changed (CimIc* unused,
+static void cb_candidate_changed (CimIcHandle unused,
                                   const CimCandidate* candidate,
-                                  CimGic* gic)
+                                  void* gic)
 {
-  c_candidate_change (gic->ccandidate, candidate);
+  c_candidate_change (((CimGic*) gic)->ccandidate, candidate);
 }
 
-static void cb_candidate_selected (CimIc* unused,
+static void cb_candidate_selected (CimIcHandle unused,
                                    const CimSelection* selection,
-                                   CimGic* gic)
+                                   void* gic)
 {
-  c_candidate_select (gic->ccandidate, selection);
+  c_candidate_select (((CimGic*) gic)->ccandidate, selection);
 }
 
 static void cim_gic_set_use_preedit (GtkIMContext* context,
@@ -260,18 +267,18 @@ static void cim_gic_set_use_preedit (GtkIMContext* context,
 
   if (use_preedit)
   {
-    cim_ic_set_callbacks (gic->ic,
-                          CIM_CB_PREEDIT_START,   cb_preedit_start,   gic,
-                          CIM_CB_PREEDIT_END,     cb_preedit_end,     gic,
-                          CIM_CB_PREEDIT_CHANGED, cb_preedit_changed, gic, -1);
+    callbacks.preedit_start   = cb_preedit_start;
+    callbacks.preedit_end     = cb_preedit_end;
+    callbacks.preedit_changed = cb_preedit_changed;
   }
   else
   {
-    cim_ic_set_callbacks (gic->ic,
-                          CIM_CB_PREEDIT_START,   NULL, NULL,
-                          CIM_CB_PREEDIT_END,     NULL, NULL,
-                          CIM_CB_PREEDIT_CHANGED, NULL, NULL, -1);
+    callbacks.preedit_start   = nullptr;
+    callbacks.preedit_end     = nullptr;
+    callbacks.preedit_changed = nullptr;
   }
+
+  cim_ic_set_callbacks (gic->ic, &callbacks, gic);
 }
 
 static void cim_gic_set_surround (GtkIMContext* context,
@@ -291,22 +298,34 @@ GtkIMContext* cim_gic_new ()
   return g_object_new (cim_gic_get_type (), NULL);
 }
 
-static void cb_commit (CimIc* unused, const char* text, CimGic* gic)
+static void cb_commit (CimIcHandle unused, const char* text, void* gic)
 {
   g_signal_emit_by_name (gic, "commit", text);
 }
 
-static gboolean cb_delete_surround (CimIc*  unused,
-                                    int     offset,
-                                    int     n_chars,
-                                    CimGic* gic)
+static gboolean cb_delete_surround (CimIcHandle unused,
+                                    int   offset,
+                                    int   n_chars,
+                                    void* gic)
 {
   gboolean retval;
-  g_signal_emit_by_name (gic, "delete-surrounding", offset, n_chars, &retval);
+  g_signal_emit_by_name (((CimGic*) gic), "delete-surrounding",
+                         offset, n_chars, &retval);
   return retval;
 }
 
-static gboolean cb_retrieve_surround (CimIc* unused, CimGic* gic)
+static bool cb_delete_surround2 (CimIcHandle unused,
+                                 int32_t     offset,
+                                 uint32_t    n_chars,
+                                 void* gic)
+{
+  gboolean retval;
+  g_signal_emit_by_name (((CimGic*) gic), "delete-surrounding",
+                         offset, n_chars, &retval);
+  return retval;
+}
+
+static gboolean cb_retrieve_surround (CimIcHandle unused, CimGic* gic)
 {
   gboolean retval;
   g_signal_emit_by_name (gic, "retrieve-surrounding", &retval);
@@ -314,8 +333,9 @@ static gboolean cb_retrieve_surround (CimIc* unused, CimGic* gic)
   return retval;
 }
 
-static const CimSurround* cb_get_surround (CimIc* unused, CimGic* gic)
+static const CimSurround* cb_get_surround (CimIcHandle unused, void* user_data)
 {
+  CimGic* gic = (CimGic*) user_data;
   gboolean retval;
   g_signal_emit_by_name (gic, "retrieve-surrounding", &retval);
 
@@ -327,7 +347,7 @@ static const CimSurround* cb_get_surround (CimIc* unused, CimGic* gic)
 
 static void cim_gic_init (CimGic* gic)
 {
-  gic->ic = cim_ic_new ();
+  gic->ic = cim_ic_create ();
   gic->simple = gtk_im_context_simple_new ();
 
   g_signal_connect (gic->simple, "commit", G_CALLBACK (cb_commit), gic);
@@ -342,25 +362,25 @@ static void cim_gic_init (CimGic* gic)
   g_signal_connect (gic->simple, "retrieve-surrounding",
                     G_CALLBACK (cb_retrieve_surround), gic);
 
-  cim_ic_set_callbacks (gic->ic,
-                        CIM_CB_PREEDIT_START,      cb_preedit_start,      gic,
-                        CIM_CB_PREEDIT_END,        cb_preedit_end,        gic,
-                        CIM_CB_PREEDIT_CHANGED,    cb_preedit_changed,    gic,
-                        CIM_CB_COMMIT,             cb_commit,             gic,
-                        CIM_CB_GET_SURROUND,       cb_get_surround,       gic,
-                        CIM_CB_DELETE_SURROUND,    cb_delete_surround,    gic,
-                        CIM_CB_CANDIDATE_SHOW,     cb_candidate_show,     gic,
-                        CIM_CB_CANDIDATE_HIDE,     cb_candidate_hide,     gic,
-                        CIM_CB_CANDIDATE_CHANGED,  cb_candidate_changed,  gic,
-                        CIM_CB_CANDIDATE_SELECTED, cb_candidate_selected, gic,
-                        -1);
+  callbacks.preedit_start      = cb_preedit_start;
+  callbacks.preedit_end        = cb_preedit_end;
+  callbacks.preedit_changed    = cb_preedit_changed;
+  callbacks.commit             = cb_commit;
+  callbacks.get_surround       = cb_get_surround;
+  callbacks.delete_surround    = cb_delete_surround2;
+  callbacks.candidate_show     = cb_candidate_show;
+  callbacks.candidate_hide     = cb_candidate_hide;
+  callbacks.candidate_changed  = cb_candidate_changed;
+  callbacks.candidate_selected = cb_candidate_selected;
+
+  cim_ic_set_callbacks (gic->ic, &callbacks, gic);
 }
 
 static void cim_gic_finalize (GObject* object)
 {
   CimGic* gic = CIM_GIC (object);
 
-  cim_ic_free    (gic->ic);
+  cim_ic_destroy (gic->ic);
   g_object_unref (gic->simple);
 
   if (gic->client_window)

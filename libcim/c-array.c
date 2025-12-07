@@ -20,6 +20,8 @@
 #include "c-array.h"
 #include "c-mem.h"
 
+#define C_ARRAY_MIN_CAPA  8
+
 typedef struct _CArrayPrivate CArrayPrivate;
 struct _CArrayPrivate {
   void**    data;
@@ -34,7 +36,7 @@ CArray* c_array_new (CFreeFunc free_func, bool free_data)
   CArrayPrivate* array;
 
   array = c_malloc (sizeof (CArrayPrivate));
-  array->capa      = 4;
+  array->capa      = C_ARRAY_MIN_CAPA;
   array->data      = c_malloc (array->capa * sizeof (void*));
   array->len       = 0;
   array->free_func = free_func;
@@ -79,7 +81,7 @@ void c_array_clear (CArray* array)
       if (array->data[i])
         priv->free_func (array->data[i]);
 
-  priv->capa  = 1;
+  priv->capa  = C_ARRAY_MIN_CAPA;
   array->data = c_realloc (priv->data, priv->capa * sizeof (void*));
   array->len  = 0;
 }
@@ -111,7 +113,7 @@ bool c_array_remove_index (CArray* array, int i)
   array->data[i] = array->data[array->len - 1];
   array->len--;
 
-  if (array->len < priv->capa / 4)
+  if (array->len + C_ARRAY_MIN_CAPA == priv->capa / 2)
   {
     priv->capa  = priv->capa / 2;
     array->data = c_realloc (array->data, sizeof (void*) * priv->capa);

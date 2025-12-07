@@ -1,5 +1,3 @@
-include ./config.mk
-
 SUBDIRS = libcim inputs samples tests
 
 all:

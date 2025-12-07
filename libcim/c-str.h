@@ -3,7 +3,7 @@
  * c-str.h
  * This file is part of Clair.
  *
- * Copyright (C) 2020-2024 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2020-2025 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -60,9 +60,9 @@ void      c_utf8_strncpy    (char * restrict dst,
                              size_t n_chars);
 char     *c_utf8_prev_char  (const char *utf8);
 char     *c_utf8_next_char  (const char *utf8);
-char     *c_utf8_offset_to_pointer (const char *utf8, size_t offset_in_chars);
-char     *c_char32_to_utf8  (const char32_t *char32, ssize_t n_char32s);
-int       c_char32_to_utf8_with_buf (char32_t char32, char *utf8);
+const char* c_utf8_offset_to_pointer (const char *utf8, size_t offset_in_chars);
+char     *c_char32_to_utf8  (const char32_t *char32, int n_char32s);
+int       c_char32_to_utf8_buf (char32_t* char32, char* buf, int n_char32s);
 char32_t* c_utf8_to_char32  (const char* utf8);
 int       c_utf8_collate    (const char* restrict s1,
                              const char* restrict s2);

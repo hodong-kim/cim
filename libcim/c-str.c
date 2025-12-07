@@ -3,7 +3,7 @@
  * c-str.c
  * This file is part of Clair.
  *
- * Copyright (C) 2020-2024 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2020-2025 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -26,12 +26,12 @@
 #include <stdio.h>
 #include <ctype.h>
 
-#define C_STRING_DEFAULT_CAPA  16
+#define C_STRING_MIN_CAPA  8
 
 char *c_str_strip (const char *str)
 {
   if (!str)
-    return NULL;
+    return nullptr;
 
   while (*str && isspace (*str))
     str++;
@@ -98,7 +98,7 @@ char* c_str_join (const char *str, ...)
 {
   va_list ap;
   size_t  offset = 0;
-  char*   result = NULL;
+  char*   result = nullptr;
 
   va_start (ap, str);
 
@@ -118,6 +118,23 @@ char* c_str_join (const char *str, ...)
   return result;
 }
 
+/**
+ * c_str_sprintf:
+ * @format: A printf-style format string.
+ * @...:    Additional arguments as required by @format.
+ *
+ * Allocates a new string via c_malloc and fills it with the formatted
+ * output. First, the required length is computed with vsnprintf, then
+ * memory is allocated (including space for the null terminator), and finally
+ * vsnprintf writes the output into the buffer.
+ *
+ * Note:
+ * - This function assumes proper input; if vsnprintf returns a negative
+ *   value, it is likely due to a formatting error and c_malloc will abort.
+ * - c_malloc aborts if memory allocation fails.
+ *
+ * Returns: A pointer to the newly allocated string.
+ */
 char* c_str_sprintf (const char* restrict format, ...)
 {
   char*   result;
@@ -125,14 +142,14 @@ char* c_str_sprintf (const char* restrict format, ...)
   va_list ap;
 
   va_start (ap, format);
-  len = vsnprintf (NULL, 0, format, ap);
+  len = vsnprintf (nullptr, 0, format, ap);
   va_end (ap);
 
   result = c_malloc (len + 1);
 
   va_start (ap, format);
-  vsprintf (result, format, ap);
-  va_end   (ap);
+  vsnprintf (result, len + 1, format, ap);
+  va_end (ap);
 
   return result;
 }
@@ -142,13 +159,13 @@ bool c_str_equal (const char *a, const char *b)
   if (!a)
   {
     a = "";
-    c_log_warning ("The left argument is NULL.");
+    c_log_warning ("The left argument is nullptr.");
   }
 
   if (!b)
   {
     b = "";
-    c_log_warning ("The right argument is NULL.");
+    c_log_warning ("The right argument is nullptr.");
   }
 
   return strcmp (a, b) == 0;
@@ -179,25 +196,25 @@ bool c_str_ends_with (const char *str, const char *suffix)
   return !strncmp (str + len1 - len2, suffix, len2);
 }
 
-char *c_strdup (const char *str)
+char* c_strdup (const char* str)
 {
-  void *mem = strdup (str);
+  void* mem = strdup (str);
 
   if (mem)
     return mem;
 
-  perror (__PRETTY_FUNCTION__);
+  perror (__func__);
   abort ();
 }
 
-char *c_strndup (const char *str, size_t len)
+char* c_strndup (const char* str, size_t len)
 {
-  void *mem = strndup (str, len);
+  void* mem = strndup (str, len);
 
   if (mem)
     return mem;
 
-  perror (__PRETTY_FUNCTION__);
+  perror (__func__);
   abort ();
 }
 
@@ -207,7 +224,7 @@ char **c_str_split (const char *str, char c)
   const char *p;
   const char *mark;
 
-  array = c_array_new (NULL, false);
+  array = c_array_new (nullptr, false);
   p = str;
 
   while (1)
@@ -226,7 +243,7 @@ char **c_str_split (const char *str, char c)
     }
   }
 
-  c_array_add (array, NULL);
+  c_array_add (array, nullptr);
 
   return (char **) c_array_free (array);
 }
@@ -238,7 +255,7 @@ static char* c_str_resize_capa (char* str, size_t* capa, size_t req_len)
   while (req_len > *capa)
     *capa *= 2;
 
-  while (req_len + C_STRING_DEFAULT_CAPA < *capa / 4)
+  while (req_len + C_STRING_MIN_CAPA <= *capa / 2)
     *capa = *capa / 2;
 
   if (*capa != old_capa)
@@ -251,7 +268,7 @@ char* c_str_rep (const char* s, const char* s1, const char* s2)
 {
   char*  str;
   char*  p;
-  size_t capa = C_STRING_DEFAULT_CAPA;
+  size_t capa = C_STRING_MIN_CAPA;
   size_t str_len = 0;
   size_t s1_len = strlen (s1);
   size_t s2_len = strlen (s2);
@@ -292,22 +309,22 @@ char* c_str_rep (const char* s, const char* s1, const char* s2)
 
 char **c_strv_dup (char **strv)
 {
-  if (strv == NULL)
-    return NULL;
+  if (strv == nullptr)
+    return nullptr;
 
-  CArray *array = c_array_new (NULL, false);
+  CArray *array = c_array_new (nullptr, false);
 
   for (int i = 0; strv[i]; i++)
     c_array_add (array, c_strdup (strv[i]));
 
-  c_array_add (array, NULL);
+  c_array_add (array, nullptr);
 
   return (char **) c_array_free (array);
 }
 
 void c_strv_free (char **strv)
 {
-  if (strv == NULL)
+  if (strv == nullptr)
     return;
 
   for (int i = 0; strv[i]; i++)
@@ -378,6 +395,22 @@ size_t c_utf8_strnlen (const char *utf8, size_t max_n_bytes)
   return len;
 }
 
+/**
+ * c_utf8_strncpy:
+ * @dst:     Pointer to the destination buffer.
+ * @src:     Pointer to a valid, null-terminated UTF-8 string.
+ * @n_chars: The maximum number of UTF-8 code points to copy.
+ *
+ * Copies up to @n_chars UTF-8 code points from @src to @dst.
+ * The copy stops when either @n_chars code points have been
+ * copied or the end of the @src string is reached.
+ * A null terminator is appended to @dst.
+ *
+ * Note:
+ *  - @src must be a valid UTF-8 string.
+ *
+ * Returns: Nothing.
+ */
 void c_utf8_strncpy (char * restrict dst,
                      const char * restrict src,
                      size_t n_chars)
@@ -402,7 +435,7 @@ void c_utf8_strncpy (char * restrict dst,
 char *c_utf8_prev_char (const char *utf8)
 {
   if (!utf8)
-    return NULL;
+    return nullptr;
 
   do {
     utf8--;
@@ -414,7 +447,7 @@ char *c_utf8_prev_char (const char *utf8)
 char *c_utf8_next_char (const char *utf8)
 {
   if (!utf8)
-    return NULL;
+    return nullptr;
 
   while (*utf8)
   {
@@ -427,10 +460,27 @@ char *c_utf8_next_char (const char *utf8)
   if (*utf8)
     return (char *) utf8;
 
-  return NULL;
+  return nullptr;
 }
 
-char *c_utf8_offset_to_pointer (const char *utf8, size_t offset_in_chars)
+/**
+ * @brief Returns a pointer to the code point
+ *        at a given index in a UTF-8 string.
+ *
+ * This function scans a null-terminated UTF-8 string and returns a pointer
+ * to the start of the code point at the specified zero-based index. The
+ * function assumes that the input string is non-NULL and valid UTF-8.
+ * If the offset equals the number of code points in the string, a pointer
+ * to the terminating null is returned.
+ *
+ * @param utf8            A valid, null-terminated UTF-8 string.
+ * @param offset_in_chars The zero-based index of the target code point.
+ *
+ * @return const char*    A pointer to the beginning of the code point at
+ *                        the specified index, or to the null terminator if
+ *                        the offset equals the total number of code points.
+ */
+const char* c_utf8_offset_to_pointer (const char* utf8, size_t offset_in_chars)
 {
   while (*utf8 && offset_in_chars > 0)
   {
@@ -439,13 +489,13 @@ char *c_utf8_offset_to_pointer (const char *utf8, size_t offset_in_chars)
       offset_in_chars--;
   }
 
-  return (char *) utf8;
+  return utf8;
 }
 
 char32_t *c_utf8_to_char32 (const char *utf8)
 {
   if (!utf8)
-    return NULL;
+    return nullptr;
 
   size_t len  = 0;
   size_t capa = 8;
@@ -521,7 +571,7 @@ int c_utf8_collate (const char * restrict s1, const char * restrict s2)
   return retval;
 }
 
-int c_char32_to_utf8_with_buf (char32_t char32, char *utf8)
+static int c_1char32_to_utf8_buf (char32_t char32, char* buf)
 {
   int len = 0;
 
@@ -531,68 +581,152 @@ int c_char32_to_utf8_with_buf (char32_t char32, char *utf8)
   }
   else if (char32 < 0x0080)
   { /* 1-byte */
-    utf8[len++] = char32;
+    buf[len++] = char32;
   }
   else if (char32 < 0x0800)
   { /* 2-byte */
-    utf8[len++] = 0b11000000 | (char32 >> 6);
-    utf8[len++] = 0b10000000 | (char32 & 0b00111111);
+    buf[len++] = 0b11000000 | (char32 >> 6);
+    buf[len++] = 0b10000000 | (char32 & 0b00111111);
   }
   else if (char32 < 0x10000)
   { /* 3-byte */
-    utf8[len++] = 0b11100000 | (char32 >> 12);
-    utf8[len++] = 0b10000000 | (char32 >>  6 & 0b00111111);
-    utf8[len++] = 0b10000000 | (char32       & 0b00111111);
+    buf[len++] = 0b11100000 | (char32 >> 12);
+    buf[len++] = 0b10000000 | (char32 >>  6 & 0b00111111);
+    buf[len++] = 0b10000000 | (char32       & 0b00111111);
   }
   else if (char32 < 0x110000)
   { /* 4-byte */
-    utf8[len++] = 0b11110000 | (char32 >> 18);
-    utf8[len++] = 0b10000000 | (char32 >> 12 & 0b00111111);
-    utf8[len++] = 0b10000000 | (char32 >>  6 & 0b00111111);
-    utf8[len++] = 0b10000000 | (char32       & 0b00111111);
+    buf[len++] = 0b11110000 | (char32 >> 18);
+    buf[len++] = 0b10000000 | (char32 >> 12 & 0b00111111);
+    buf[len++] = 0b10000000 | (char32 >>  6 & 0b00111111);
+    buf[len++] = 0b10000000 | (char32       & 0b00111111);
   }
   else
   {
     c_log_warning ("Cannot convert 0x%x to UTF-8.", char32);
-    len += c_char32_to_utf8_with_buf (0xfffd, utf8);
+    len += c_1char32_to_utf8_buf (0xfffd, buf);
   }
 
-  utf8[len] = 0;
+  buf[len] = 0;
 
   return len;
 }
 
-char *c_char32_to_utf8 (const char32_t *char32, ssize_t n_char32s)
+int c_char32_to_utf8_buf (char32_t* char32, char* buf, int n_char32s)
 {
   if (!char32)
-    return NULL;
+    return 0;
 
-  char *utf8;
-  int   len  = 0;
-  int   capa = 8;
-
-  utf8 = c_malloc (capa * sizeof (char));
-  utf8[0] = 0;
+  int len = 0;
 
   for (int i = 0; (n_char32s < 0 || i < n_char32s) && char32[i]; i++)
-  {
-    if (capa < len + 5)
-    {
-      capa *= 2;
-      utf8 = c_realloc (utf8, capa * sizeof (char));
-    }
+    len += c_1char32_to_utf8_buf (char32[i], buf + len);
 
-    len += c_char32_to_utf8_with_buf (char32[i], utf8 + len);
+  buf[len] = '\0';
+
+  return len;
+}
+
+/**
+ * @brief Convert a char32_t string to a UTF-8 encoded string.
+ *
+ * This function converts a UTF-32 input string to a UTF-8 string.
+ * If n_char32s is negative, the input is assumed to be a null-
+ * terminated string. Any invalid Unicode code point (greater than
+ * 0x10FFFF or in the UTF-16 surrogate range) is replaced with U+FFFD.
+ *
+ * Memory is allocated for the maximum size (count * 4 + 1) and then
+ * reallocated to the actual size used. If any overflow occurs during
+ * counting or memory size calculation, the function returns nullptr.
+ *
+ * @param char32    Input char32_t string pointer.
+ * @param n_char32s Number of code points to convert. If negative,
+ *                  the input is assumed to be null-terminated.
+ *
+ * @return Dynamically allocated UTF-8 string (free() must be called)
+ *         or nullptr on failure. In particular, if an overflow occurs,
+ *         nullptr is returned.
+ */
+char* c_char32_to_utf8 (const char32_t* char32, int n_char32s)
+{
+  if (!char32)
+    return nullptr;
+
+  size_t count = 0;
+  if (n_char32s < 0)
+  {
+    const char32_t* p = char32;
+    while (*p)
+    {
+      /* Check for potential overflow in count */
+      if (count == SIZE_MAX)
+        return nullptr;
+      count++;
+      p++;
+    }
+  }
+  else
+  {
+    count = (size_t) n_char32s;
   }
 
-  return c_realloc (utf8, len + 1);
+  /* Check for potential overflow:
+     (count * 4 + 1) must not exceed SIZE_MAX. */
+  if (count > (SIZE_MAX - 1) / 4)
+    return nullptr;
+
+  size_t max_size = count * 4 + 1;
+  char* result = (char*) malloc (max_size);
+  if (!result)
+    return nullptr;
+
+  char* dst = result;
+  for (size_t i = 0; i < count; i++)
+  {
+    char32_t cp = char32[i];
+
+    if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF))
+      cp = 0xFFFD;
+
+    if (cp < 0x80)
+    {
+      *dst++ = (char) cp;
+    }
+    else if (cp < 0x800)
+    {
+      *dst++ = (char) (0xC0 | (cp >> 6));
+      *dst++ = (char) (0x80 | (cp & 0x3F));
+    }
+    else if (cp < 0x10000)
+    {
+      *dst++ = (char) (0xE0 | (cp >> 12));
+      *dst++ = (char) (0x80 | ((cp >> 6) & 0x3F));
+      *dst++ = (char) (0x80 | (cp & 0x3F));
+    }
+    else
+    {
+      *dst++ = (char) (0xF0 | (cp >> 18));
+      *dst++ = (char) (0x80 | ((cp >> 12) & 0x3F));
+      *dst++ = (char) (0x80 | ((cp >> 6) & 0x3F));
+      *dst++ = (char) (0x80 | (cp & 0x3F));
+    }
+  }
+
+  *dst = '\0';
+
+  size_t used_size = (size_t) (dst - result + 1);
+  char* tmp = realloc (result, used_size);
+  /* On realloc failure, the original memory block is still valid. */
+  if (tmp)
+      result = tmp;
+  return result;
 }
 
 CString* c_string_new (const char* str, bool free_str)
 {
   CString* string = c_malloc (sizeof (CString));
 
-  string->capa     = C_STRING_DEFAULT_CAPA;
+  string->capa     = C_STRING_MIN_CAPA;
   string->str      = c_malloc (string->capa);
   string->len      = 0;
   string->free_str = free_str;
@@ -605,7 +739,7 @@ CString* c_string_new (const char* str, bool free_str)
 char *c_string_free (CString *string)
 {
   if (!string)
-    return NULL;
+    return nullptr;
 
   char *str;
 
@@ -615,7 +749,7 @@ char *c_string_free (CString *string)
   if (string->free_str)
   {
     free (str);
-    str = NULL;
+    str = nullptr;
   }
 
   free (string);
@@ -630,7 +764,7 @@ static void c_string_resize_capa (CString *string, size_t req_len)
   while (req_len > string->capa)
     string->capa *= 2;
 
-  while (req_len + C_STRING_DEFAULT_CAPA < string->capa / 4)
+  while (req_len + C_STRING_MIN_CAPA <= string->capa / 2)
     string->capa = string->capa / 2;
 
   if (string->capa != old_capa)

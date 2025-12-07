@@ -2,13 +2,17 @@ include ../../config.mk
 
 GTK3_BINARY_VERSION=`pkg-config --variable=gtk_binary_version gtk+-3.0`
 
-IM_CIM_GTK3_DEPS_CFLAGS = `pkg-config --cflags gtk+-3.0`
-IM_CIM_GTK3_DEPS_LIBS   = `pkg-config --libs   gtk+-3.0` \
-	$(top_srcdir)/libcim/libcim.a
+IM_CIM_GTK3_DEPS_CFLAGS = \
+	`pkg-config --cflags gtk+-3.0` \
+	-I$(TOP_SRCDIR)/libcim
+
+IM_CIM_GTK3_DEPS_LIBS = \
+	`pkg-config --libs   gtk+-3.0` \
+	$(TOP_SRCDIR)/libcim/libcim.a
 
 CFLAGS = \
 	$(EXTRA_CFLAGS) \
-	-I$(top_srcdir)/libcim \
+	-I$(TOP_SRCDIR)/libcim \
 	-DGETTEXT_PACKAGE=\"$(GETTEXT_PACKAGE)\" \
 	-DCIM_LOCALE_DIR=\"$(CIM_LOCALE_DIR)\"
 
@@ -28,7 +32,7 @@ $(IM_CIM_GTK3): im-cim-gtk3.o c-candidate.o Makefile
 	  -Wl,-soname -Wl,$(IM_CIM_GTK3) \
 	  -o $(IM_CIM_GTK3)
 
-im-cim-gtk3.o: $(SOURCES) Makefile $(top_srcdir)/libcim/libcim.a
+im-cim-gtk3.o: $(SOURCES) Makefile $(TOP_SRCDIR)/libcim/libcim.a
 	$(CC) -fPIC $(im_cim_gtk3_CFLAGS) -c $(SOURCES) -o im-cim-gtk3.o
 
 c-candidate.o: c-candidate.c Makefile

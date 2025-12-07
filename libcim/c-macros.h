@@ -3,7 +3,7 @@
  * c-macros.h
  * This file is part of Clair.
  *
- * Copyright (C) 2019-2024 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2019-2025 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -30,15 +30,15 @@
 #define C_MAX(a, b)  (((a) > (b)) ? (a) : (b))
 #define C_MIN(a, b)  (((a) < (b)) ? (a) : (b))
 #define C_UINT_TO_VOIDP(u)  ((void*) (uintptr_t) (u))
-#define C_INT_TO_VOIDP(u)   ((void*) (intptr_t)  (u))
-#define C_VOIDP_TO_INT(u)   ((int)   (intptr_t)  (u))
+#define C_INT_TO_VOIDP(i)   ((void*) (intptr_t)  (i))
+#define C_VOIDP_TO_INT(p)   ((int)   (intptr_t)  (p))
 
 #ifndef N_
   #define N_(text)  (text) /* only mark for translation */
 #endif
 
 #ifndef __cplusplus
-#if (defined(__GNUC__) && (GCC_VERSION < 13)) || \
+#if (defined(__GNUC__) && (__GNUC__ < 13)) || \
     (defined(__clang__) && (__clang_major__ < 16))
 #define nullptr ((void*) 0)
 #endif

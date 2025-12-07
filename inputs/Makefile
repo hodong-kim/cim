@@ -1,6 +1,6 @@
 include ../config.mk
 
-SUBDIRS = gtk3
+SUBDIRS = gtk3 qt6
 
 all:
 	for subdir in $(SUBDIRS); do \

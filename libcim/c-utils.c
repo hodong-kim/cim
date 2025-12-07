@@ -3,7 +3,7 @@
  * c-utils.c
  * This file is part of Clair.
  *
- * Copyright (C) 2019-2023 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2019-2024 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -25,33 +25,16 @@
 
 uid_t c_get_loginuid ()
 {
-  uid_t loginuid = -1;
+  uid_t loginuid = (uid_t) -1;
+  const char* name = getlogin ();
 
-#ifdef __linux__
-  FILE* file;
-
-  file = fopen ("/proc/self/loginuid", "rt");
-
-  if (file)
+  if (name)
   {
-    uid_t uid;
+    const struct passwd* info = getpwnam (name);
 
-    if (fscanf (file, "%d", &uid) > 0)
-      loginuid = uid;
-
-    fclose (file);
-  }
-#else
-  const char* name;
-
-  if ((name = getlogin ()))
-  {
-    const struct passwd* info;
-
-    if ((info = getpwnam (name)))
+    if (info)
       loginuid = info->pw_uid;
   }
-#endif
 
   if (loginuid == (uid_t) -1)
     loginuid = getuid ();
@@ -65,7 +48,23 @@ uid_t c_get_loginuid ()
  */
 const char* c_get_user_home_dir ()
 {
-  const char* home = getpwuid (c_get_loginuid ())->pw_dir;
+  const char* home = nullptr;
+  const struct passwd* pw;
+
+  const char* name = getlogin ();
+  if (name)
+  {
+    pw = getpwnam (name);
+  }
+  else
+  {
+    uid_t uid = getuid ();
+    pw = getpwuid (uid);
+  }
+
+  if (pw)
+    home = pw->pw_dir;
+
   if (!home)
     home = getenv ("HOME");
 

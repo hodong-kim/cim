@@ -3,7 +3,7 @@
  * c-candidate.h
  * This file is part of Nimf.
  *
- * Copyright (C) 2015-2023 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2015-2025 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -49,7 +49,7 @@ void       table_item_deselect (TableItem* item);
 
 #include <stdbool.h>
 
-#if (defined(__GNUC__) && (GCC_VERSION < 13)) || \
+#if (defined(__GNUC__) && (__GNUC__ < 13)) || \
     (defined(__clang__) && (__clang_major__ < 16))
 enum _CCandidateCbType {
   C_CANDIDATE_CB_CHANGE_PAGE,

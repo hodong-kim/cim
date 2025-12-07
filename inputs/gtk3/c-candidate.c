@@ -353,6 +353,25 @@ static void cb_button_pressed (GObject*    object,
                                   ccandidate->cb_user_data[C_CANDIDATE_CB_ACTIVATE_ITEM]);
 }
 
+/**
+ * @brief 후보창 테이블에서 특정 위치의 아이템을 안전하게 가져옵니다.
+ * @param candidate 후보창 데이터 구조체 포인터
+ * @param row 가져올 아이템의 행(row) 인덱스
+ * @param col 가져올 아이템의 열(column) 인덱스
+ * @return 성공 시 CimItem 포인터, 실패(인덱스 초과 등) 시 NULL
+ */
+static inline CimItem* c_candidate_get_item (const CimCandidate* candidate,
+                                             uint32_t row,
+                                             uint32_t col)
+{
+  // 경계 검사를 통해 메모리 안전성을 보장합니다.
+  if (candidate && candidate->table && row < candidate->n_rows && col < candidate->n_cols) {
+      // 평면화된 배열의 인덱스를 계산하여 해당 요소의 주소를 반환합니다.
+      return &candidate->table[row * candidate->n_cols + col];
+  }
+  return NULL;
+}
+
 void c_candidate_change (CCandidate* ccandidate, const CimCandidate* candidate)
 {
   c_candidate_clear (ccandidate);
@@ -374,7 +393,7 @@ void c_candidate_change (CCandidate* ccandidate, const CimCandidate* candidate)
   {
     for (int col = 0; col < MIN (candidate->n_cols, ccandidate->n_cols); col++)
     {
-      CimItem* item = &(candidate->table[row][col]);
+      CimItem* item = c_candidate_get_item (candidate, row, col);
 
       switch (item->type)
       {

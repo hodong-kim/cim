@@ -2,17 +2,17 @@ include ../../config.mk
 
 CIM_PLUGIN_DIR = $(libdir)/input.d
 
-DEPS_CFLAGS = `pkg-config --cflags libhangul` -I$(top_srcdir)/libcim \
+DEPS_CFLAGS = `pkg-config --cflags libhangul` -I$(TOP_SRCDIR)/libcim \
 	$(INTL_CFLAG)
 
 DEPS_LIBS   = `pkg-config --libs libhangul` \
-	$(top_srcdir)/libcim/libcim.a \
+	$(TOP_SRCDIR)/libcim/libcim.a \
 	$(INTL_LDFLAG)
 
 SOURCES = im-libhangul.c
 CFLAGS  = \
 	$(EXTRA_CFLAGS) \
-	-I$(top_srcdir)/libcim \
+	-I$(TOP_SRCDIR)/libcim \
 	$(DEPS_CFLAGS)
 
 LDFLAGS = $(EXTRA_LDFLAGS) -Wl,--as-needed $(DEPS_LIBS)

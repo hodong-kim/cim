@@ -1,37 +1,49 @@
-/* -*- Mode: C; indent-tabs-mode: nil; c-basic-offset: 2; tab-width: 2 -*- */
+// -*- Mode: C; indent-tabs-mode: nil; c-basic-offset: 2; tab-width: 2 -*-
 /*
- * c-mem.c
- * This file is part of Clair.
- *
- * Copyright (C) 2021-2023 Hodong Kim <hodong@nimfsoft.art>
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- */
+  c-mem.c
+  This file is part of Clair.
+
+  Copyright (C) 2021-2025 Hodong Kim <hodong@nimfsoft.art>
+
+  Permission to use, copy, modify, and/or distribute this software for any
+  purpose with or without fee is hereby granted.
+
+  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+  ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+  WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+  ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+*/
 #include "c-mem.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
+/**
+ * c_malloc:
+ * @size: The number of bytes to allocate.
+ *
+ * Dynamically allocates memory. If @size is 0, the function returns
+ * nullptr. On success, it returns a pointer to the allocated memory.
+ * If allocation fails, it prints an error message using perror() and
+ * aborts the program.
+ *
+ * Returns: A pointer to the allocated memory, or the program aborts on
+ * failure.
+ */
 void* c_malloc (size_t size)
 {
   if (!size)
-    return NULL;
+    return nullptr;
 
   void* mem = malloc (size);
 
   if (mem)
     return mem;
 
-  perror (__PRETTY_FUNCTION__);
+  perror (__func__);
   abort ();
 }
 
@@ -45,7 +57,7 @@ void* c_calloc (size_t number, size_t size)
   if (mem)
     return mem;
 
-  perror (__PRETTY_FUNCTION__);
+  perror (__func__);
   abort ();
 }
 
@@ -54,7 +66,7 @@ void* c_realloc (void* ptr, size_t size)
   if (!size)
   {
     free (ptr);
-    return NULL;
+    return nullptr;
   }
 
   void* mem = realloc (ptr, size);
@@ -62,22 +74,22 @@ void* c_realloc (void* ptr, size_t size)
   if (mem)
     return mem;
 
-  perror (__PRETTY_FUNCTION__);
+  perror (__func__);
   abort ();
 }
 
-void *c_memdup (const void *src, size_t size)
+void* c_memdup (const void* src, size_t size)
 {
   if (!size)
-    return NULL;
+    return nullptr;
 
-  void *dst = c_malloc (size);
+  void* dst = c_malloc (size);
   return memcpy (dst, src, size);
 }
 
-CRef *c_ref_new (uint8_t *data, CFreeFunc data_free_func)
+CRef* c_ref_new (uint8_t* data, CFreeFunc data_free_func)
 {
-  CRef *ref = c_malloc (sizeof (CRef));
+  CRef* ref = c_malloc (sizeof (CRef));
 
   ref->data      = data;
   ref->free_func = data_free_func;
@@ -86,17 +98,17 @@ CRef *c_ref_new (uint8_t *data, CFreeFunc data_free_func)
   return ref;
 }
 
-void c_ref_inc (CRef *ref)
+void c_ref_inc (CRef* ref)
 {
-  if (ref == NULL)
+  if (ref == nullptr)
     return;
 
   ref->count++;
 }
 
-void c_ref_dec (CRef *ref)
+void c_ref_dec (CRef* ref)
 {
-  if (ref == NULL)
+  if (ref == nullptr)
     return;
 
   ref->count--;

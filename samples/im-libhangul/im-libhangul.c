@@ -3,7 +3,7 @@
  * im-libhangul.c
  * This file is part of Cim.
  *
- * Copyright (C) 2023,2024 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2023-2025 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -283,17 +283,12 @@ struct _Key {
   uint32_t keyval;
 };
 
-typedef struct _Hangul Hangul;
-struct _Hangul
+typedef struct CimIcImpl Hangul;
+struct CimIcImpl
 {
-  CimIc ic;
-
-  union {
-    CimCallbacks cb;
-    void* cb_funcs[CIM_CB_N_TYPES];
-  };
-
-  void* cb_user_data[CIM_CB_N_TYPES];
+  CimIcHandle ic;
+  const CimCallbacks* cb;
+  void* cb_user_data;
 
   HangulInputContext* hic;
   PreeditState preedit_state;
@@ -316,53 +311,52 @@ static atomic_int  hangul_hanja_table_ref_count;
 
 static void hangul_call_preedit_start (Hangul* hangul)
 {
-  if (hangul->cb.preedit_start)
-    hangul->cb.preedit_start (&hangul->ic,
-                              hangul->cb_user_data[CIM_CB_PREEDIT_START]);
+  if (hangul->cb->preedit_start)
+    hangul->cb->preedit_start (hangul->ic,
+                               hangul->cb_user_data);
 }
 
 static void hangul_call_preedit_end (Hangul* hangul)
 {
-  if (hangul->cb.preedit_end)
-    hangul->cb.preedit_end (&hangul->ic,
-                            hangul->cb_user_data[CIM_CB_PREEDIT_END]);
+  if (hangul->cb->preedit_end)
+    hangul->cb->preedit_end (hangul->ic,
+                             hangul->cb_user_data);
 }
 
 static void hangul_call_preedit_changed (Hangul* hangul)
 {
-  if (hangul->cb.preedit_changed)
-    hangul->cb.preedit_changed (&hangul->ic, &hangul->preedit,
-                                hangul->cb_user_data[CIM_CB_PREEDIT_CHANGED]);
+  if (hangul->cb->preedit_changed)
+    hangul->cb->preedit_changed (hangul->ic, &hangul->preedit,
+                                 hangul->cb_user_data);
 }
 
 static void hangul_call_commit (Hangul* hangul, const char* text)
 {
-  if (hangul->cb.commit)
-    hangul->cb.commit ((CimIc*) hangul, text,
-                       hangul->cb_user_data[CIM_CB_COMMIT]);
+  if (hangul->cb->commit)
+    hangul->cb->commit (hangul, text,
+                        hangul->cb_user_data);
 }
 
 static const CimSurround* hangul_call_get_surround (Hangul* hangul)
 {
-  if (hangul->cb.get_surround)
-    return hangul->cb.get_surround ((CimIc*) hangul,
-                                    hangul->cb_user_data[CIM_CB_GET_SURROUND]);
+  if (hangul->cb->get_surround)
+    return hangul->cb->get_surround (hangul, hangul->cb_user_data);
   return NULL;
 }
 
 static bool hangul_call_delete_surround (Hangul* hangul, int offset, int n_chars)
 {
-  if (hangul->cb.delete_surround)
-    return hangul->cb.delete_surround ((CimIc*) hangul, offset, n_chars,
-                                       hangul->cb_user_data[CIM_CB_DELETE_SURROUND]);
+  if (hangul->cb->delete_surround)
+    return hangul->cb->delete_surround (hangul, offset, n_chars,
+                                        hangul->cb_user_data);
   return NULL;
 }
 
 static void hangul_call_candidate_show (Hangul* hangul)
 {
-  if (hangul->cb.candidate_show)
-    hangul->cb.candidate_show ((CimIc*) hangul, N_ROWS, N_COLS, false,
-                               hangul->cb_user_data[CIM_CB_CANDIDATE_SHOW]);
+  if (hangul->cb->candidate_show)
+    hangul->cb->candidate_show (hangul, N_ROWS, N_COLS, false,
+                                hangul->cb_user_data);
   hangul->visible = true;
 }
 
@@ -374,26 +368,26 @@ static void hangul_call_candidate_hide (Hangul* hangul)
   hangul->candidate.n_pages = 0;
   hangul->candidate.n_rows  = 0;
 
-  if (hangul->cb.candidate_hide)
-    hangul->cb.candidate_hide ((CimIc*) hangul,
-                               hangul->cb_user_data[CIM_CB_CANDIDATE_HIDE]);
+  if (hangul->cb->candidate_hide)
+    hangul->cb->candidate_hide (hangul, hangul->cb_user_data);
+
   hangul->visible = false;
 }
 
 static void hangul_call_candidate_changed (Hangul* hangul)
 {
-  if (hangul->cb.candidate_changed)
-    hangul->cb.candidate_changed ((CimIc*) hangul, &hangul->candidate,
-                                   hangul->cb_user_data[CIM_CB_CANDIDATE_CHANGED]);
+  if (hangul->cb->candidate_changed)
+    hangul->cb->candidate_changed (hangul, &hangul->candidate,
+                                   hangul->cb_user_data);
 }
 
 static void hangul_call_candidate_selected (Hangul* hangul)
 {
-  if (hangul->cb.candidate_selected)
+  if (hangul->cb->candidate_selected)
   {
     hangul->selection.end_row = hangul->selection.start_row;
-    hangul->cb.candidate_selected ((CimIc*) hangul, &hangul->selection,
-                                   hangul->cb_user_data[CIM_CB_CANDIDATE_SELECTED]);
+    hangul->cb->candidate_selected (hangul, &hangul->selection,
+                                    hangul->cb_user_data);
   }
 }
 
@@ -425,7 +419,7 @@ static void hangul_update_preedit (Hangul* hangul, char* new_preedit)
   }
 }
 
-static void hangul_reset (CimIc* ic)
+static void hangul_reset (CimIcHandle ic)
 {
   Hangul* hangul = (Hangul*) ic;
 
@@ -445,22 +439,22 @@ static void hangul_reset (CimIc* ic)
   hangul_update_preedit (hangul, c_strdup (""));
 }
 
-static void hangul_focus_in (CimIc* ic)
+static void hangul_focus_in (CimIcHandle ic)
 {
 }
 
-static void hangul_focus_out (CimIc* ic)
+static void hangul_focus_out (CimIcHandle ic)
 {
   hangul_reset (ic);
 }
 
-static const CimPreedit* hangul_get_preedit (CimIc* ic)
+static const CimPreedit* hangul_get_preedit (CimIcHandle ic)
 {
   Hangul* hangul = (Hangul*) ic;
   return &hangul->preedit;
 }
 
-static const CimCandidate* hangul_get_candidate (CimIc* ic)
+static const CimCandidate* hangul_get_candidate (CimIcHandle ic)
 {
   Hangul* hangul = (Hangul*) ic;
   return &hangul->candidate;
@@ -487,23 +481,19 @@ static void hangul_candidate_commit (Hangul* hangul, const char* text)
 
 static void hangul_candidate_free (Hangul* hangul)
 {
-  for (int i = 0; i < N_ROWS; i++)
-  {
-    for (int j = 0; j < N_COLS; j++)
-      free (hangul->candidate.table[i][j].data);
-
-    free (hangul->candidate.table[i]);
-  }
+  for (int i = 0; i < N_ROWS * N_COLS; i++)
+    free (hangul->candidate.table[i].data);
 
   free (hangul->candidate.table);
 }
 
 static void hangul_candidate_insert (Hangul* hangul,
-                                    int i,
-                                    const char* item1,
-                                    const char* item2)
+                                     int row,
+                                     const char* item1,
+                                     const char* item2)
 {
-  CimItem* cols = hangul->candidate.table[i];
+  int base_index = row * N_COLS;
+  CimItem* cols = &hangul->candidate.table[base_index];
 
   free (cols[0].data);
   free (cols[1].data);
@@ -512,7 +502,7 @@ static void hangul_candidate_insert (Hangul* hangul,
   cols[0].type = CIM_ITEM_STRING;
   cols[1].type = CIM_ITEM_STRING;
   cols[2].type = CIM_ITEM_STRING;
-  cols[0].data = c_str_sprintf ("%d", (i + 1) % 10);
+  cols[0].data = c_str_sprintf ("%d", (row + 1) % 10);
   cols[1].data = c_strdup (item1);
 
   if (item2 && item2[0])
@@ -732,20 +722,23 @@ static void hangul_select_next_item (Hangul* hangul)
   }
 }
 
-static void hangul_activate_candidate_item (CimIc* ic, int row, int col)
+static void hangul_activate_candidate_item (CimIcHandle ic,
+                                            uint32_t row,
+                                            uint32_t col)
 {
   Hangul* hangul = (Hangul*) ic;
 
   if (row < hangul->candidate.n_rows)
   {
-    const char* text = hangul->candidate.table[row][1].data;
+    int index = row * N_COLS + 1;
+    const char* text = hangul->candidate.table[index].data;
 
-    if (text && text[1])
+    if (text && text[0])
       hangul_candidate_commit (hangul, text);
   }
 }
 
-static bool hangul_filter_event (CimIc* ic, const CimEvent* event)
+static bool hangul_filter_event (CimIcHandle ic, const CimEvent* event)
 {
   uint keyval;
   bool retval = false;
@@ -778,8 +771,8 @@ static bool hangul_filter_event (CimIc* ic, const CimEvent* event)
         {
           if  (surround->len && surround->cursor_pos > 0)
           {
-            char* p = c_utf8_offset_to_pointer (surround->text,
-                                                surround->cursor_pos - 1);
+            const char* p = c_utf8_offset_to_pointer (surround->text,
+                                                      surround->cursor_pos - 1);
             c_utf8_strncpy (item, p, 1);
             key = item;
           }
@@ -962,22 +955,16 @@ static bool hangul_filter_event (CimIc* ic, const CimEvent* event)
   return retval;
 }
 
-static void hangul_set_vcallbacks (CimIc* ic, va_list ap)
+static void hangul_set_callbacks (CimIcHandle ic,
+                                  const CimCallbacks* callbacks,
+                                  void* user_data)
 {
   Hangul* hangul = (Hangul*) ic;
-  CimCbType type;
-
-  while ((type = va_arg (ap, CimCbType)) != -1)
-  {
-    void*  callback  = va_arg (ap, void*);
-    void*  user_data = va_arg (ap, void*);
-    void** cb = (void**) &hangul->cb_funcs;
-    cb[type] = callback;
-    hangul->cb_user_data[type] = user_data;
-  }
+  hangul->cb = callbacks;
+  hangul->cb_user_data = user_data;
 }
 
-static void hangul_change_candidate_page (CimIc* ic, int page_index)
+static void hangul_change_candidate_page (CimIcHandle ic, uint32_t page_index)
 {
   Hangul* hangul = (Hangul*) ic;
 
@@ -993,12 +980,11 @@ static void hangul_change_candidate_page (CimIc* ic, int page_index)
   hangul_call_candidate_selected (hangul);
 }
 
-static CimIc* hangul_new ()
+static CimIcHandle hangul_create ()
 {
   hangul_hanja_table_ref_count++;
 
   Hangul* hangul = c_calloc (1, sizeof (Hangul));
-  CimIc* ic = (CimIc*) hangul;
 
   hangul->hic = hangul_ic_new ("2");
   hangul->preedit.text  = c_strdup ("");
@@ -1006,10 +992,7 @@ static CimIc* hangul_new ()
   hangul->preedit.attrs = &hangul->attr;
   hangul->preedit.attrs_len = 1;
 
-  hangul->candidate.table = c_calloc (N_ROWS, sizeof (CimItem*));
-  for (int i = 0; i < N_ROWS; i++)
-    hangul->candidate.table[i] = c_calloc (N_COLS, sizeof (CimItem));
-
+  hangul->candidate.table = c_calloc(N_ROWS * N_COLS, sizeof(CimItem));
   hangul->candidate.page_index = 0;
   hangul->candidate.n_cols  = N_COLS;
   hangul->selection.end_col = N_COLS - 1;
@@ -1023,20 +1006,10 @@ static CimIc* hangul_new ()
   if (hangul_hanja_table_ref_count == 1)
     hangul_hanja_table = hanja_table_load (NULL);
 
-  ic->filter_event            = hangul_filter_event;
-  ic->reset                   = hangul_reset;
-  ic->focus_in                = hangul_focus_in;
-  ic->focus_out               = hangul_focus_out;
-  ic->get_preedit             = hangul_get_preedit;
-  ic->get_candidate           = hangul_get_candidate;
-  ic->set_vcallbacks          = hangul_set_vcallbacks;
-  ic->activate_candidate_item = hangul_activate_candidate_item;
-  ic->change_candidate_page   = hangul_change_candidate_page;
-
-  return ic;
+  return hangul;
 }
 
-static void hangul_free (Hangul* hangul)
+static void hangul_destroy (Hangul* hangul)
 {
   if (--hangul_hanja_table_ref_count == 0)
   {
@@ -1051,17 +1024,7 @@ static void hangul_free (Hangul* hangul)
   free (hangul);
 }
 
-CimIc* cim_plugin_new_ic ()
-{
-  return (CimIc*) hangul_new ();
-}
-
-void cim_plugin_free_ic (CimIc* ic)
-{
-  hangul_free ((Hangul*) ic);
-}
-
-void cim_plugin_get_version (int* major, int* minor, int* micro)
+void cim_plugin_get_version (uint32_t* major, uint32_t* minor, uint32_t* micro)
 {
   if (major)
     *major = CIM_MAJOR_VERSION;
@@ -1072,3 +1035,27 @@ void cim_plugin_get_version (int* major, int* minor, int* micro)
   if (micro)
     *micro = CIM_MICRO_VERSION;
 }
+
+CimIcVTable vtable = {
+  .create                  = hangul_create,
+  .destroy                 = hangul_destroy,
+  .filter_event            = hangul_filter_event,
+  .reset                   = hangul_reset,
+  .focus_in                = hangul_focus_in,
+  .focus_out               = hangul_focus_out,
+  .get_preedit             = hangul_get_preedit,
+  .get_candidate           = hangul_get_candidate,
+  .set_callbacks           = hangul_set_callbacks,
+  .activate_candidate_item = hangul_activate_candidate_item,
+  .change_candidate_page   = hangul_change_candidate_page
+};
+
+CimPlugin cim_plugin = {
+  .cim_api_major = CIM_MAJOR_VERSION,
+  .cim_api_minor = CIM_MINOR_VERSION,
+  .cim_api_micro = CIM_MICRO_VERSION,
+  .get_info      = nullptr,
+  .init          = nullptr,
+  .fini          = nullptr,
+  .vtable        = &vtable
+};

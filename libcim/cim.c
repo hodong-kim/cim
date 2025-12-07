@@ -1,9 +1,9 @@
-/* -*- Mode: C; indent-tabs-mode: nil; c-basic-offset: 2; tab-width: 2 -*- */
+// -*- Mode: C; indent-tabs-mode: nil; c-basic-offset: 2; tab-width: 2 -*-
 /*
  * cim.c
  * This file is part of Cim.
  *
- * Copyright (C) 2023,2024 Hodong Kim <hodong@nimfsoft.art>
+ * Copyright (C) 2023-2025 Hodong Kim <hodong@nimfsoft.art>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -19,16 +19,20 @@
 #include "cim.h"
 #include <dlfcn.h>
 #include <stdlib.h>
-#include <stdatomic.h>
 #include "c-utils.h"
 #include "c-str.h"
 #include "c-mem.h"
 #include "c-log.h"
 
-static void*    cim_plugin;
-static CimIc* (*cim_plugin_new_ic)  ();
-static void   (*cim_plugin_free_ic) (CimIc*);
-static atomic_uint cim_ref_count;
+static CimIcVTable vtable = { 0 };
+
+struct CimIcImpl {
+  CimIcVTable* vtable;
+};
+
+static void*      cim_handle;
+static CimPlugin* cim_plugin;
+static uint32_t   cim_ref_count;
 
 /*
  * Returns the newly allocated cim.so path string on success,
@@ -52,7 +56,7 @@ char* cim_get_cim_so_path ()
   return path;
 }
 
-CimIc* cim_ic_new ()
+CimIcHandle cim_ic_create ()
 {
   cim_ref_count++;
 
@@ -63,127 +67,136 @@ CimIc* cim_ic_new ()
     if (!path)
       goto fallback;
 
-    cim_plugin = dlopen (path, RTLD_LAZY | RTLD_LOCAL);
+    cim_handle = dlopen (path, RTLD_LAZY | RTLD_LOCAL);
     free (path);
 
-    if (!cim_plugin)
+    if (!cim_handle)
     {
       c_log_warning ("Faild to open cim plugin: %s", dlerror ());
       goto fallback;
     }
 
-    void (*cim_plugin_get_version) (int*, int*, int*);
-
-    cim_plugin_get_version = dlsym (cim_plugin, "cim_plugin_get_version");
-    cim_plugin_new_ic      = dlsym (cim_plugin, "cim_plugin_new_ic");
-    cim_plugin_free_ic     = dlsym (cim_plugin, "cim_plugin_free_ic");
+    cim_plugin = dlsym (cim_handle, "cim_plugin");
+    if (!cim_plugin)
+    {
+      c_log_warning ("Can't load cim_plugin: %s", dlerror ());
+      goto fallback;
+    }
 
     bool version_check = false;
 
-    if (cim_plugin_get_version)
+    if (cim_plugin->cim_api_major == CIM_MAJOR_VERSION)
     {
-      int plugin_major;
-
-      cim_plugin_get_version (&plugin_major, nullptr, nullptr);
-
-      if (plugin_major == CIM_MAJOR_VERSION)
-      {
-        version_check = true;
-      }
-      else
-      {
-        const int cim_major = CIM_MAJOR_VERSION;
-        c_log_warning (
-          "Major version mismatch: cim plugin major version is %d, "
-          "but this cim major version is %d.", plugin_major, cim_major);
-      }
+      version_check = true;
     }
     else
     {
-      c_log_warning ("Symbol not found: cim_plugin_get_version");
+      const int cim_major = CIM_MAJOR_VERSION;
+      c_log_warning (
+        "Major version mismatch: cim plugin major version is %d, "
+        "but this caller major version is %d.",
+        cim_plugin->cim_api_major, cim_major);
     }
 
-    if (!version_check || !cim_plugin_new_ic || !cim_plugin_free_ic)
+    if (cim_plugin->init)
     {
-      if (!cim_plugin_new_ic)
-        c_log_warning ("Symbol not found: cim_plugin_new_ic");
+      if (!cim_plugin->init ())
+      {
+        dlclose (cim_handle);
+        cim_plugin = nullptr;
+        cim_handle = nullptr;
 
-      if (!cim_plugin_free_ic)
-        c_log_warning ("Symbol not found: cim_plugin_free_ic");
+        goto fallback;
+      }
+    }
 
-      dlclose (cim_plugin);
-      cim_plugin         = nullptr;
-      cim_plugin_new_ic  = nullptr;
-      cim_plugin_free_ic = nullptr;
+    if (!version_check || cim_plugin->vtable ||
+        !cim_plugin->vtable->create ||
+        !cim_plugin->vtable->destroy)
+    {
+      if (!cim_plugin->vtable)
+        c_log_warning ("Symbol not found: cim_plugin->vtable");
+
+      if (!cim_plugin->vtable->create)
+        c_log_warning ("Symbol not found: cim_plugin->vtable->create");
+
+      if (!cim_plugin->vtable->destroy)
+        c_log_warning ("Symbol not found: cim_plugin->vtable->destroy");
+
+      dlclose (cim_handle);
+      cim_plugin = nullptr;
+      cim_handle = nullptr;
 
       goto fallback;
     }
   }
 
-  if (cim_plugin)
-    return cim_plugin_new_ic ();
+  if (cim_handle)
+    return cim_plugin->vtable->create ();
+
 
   fallback:
 
-  return c_calloc (1, sizeof (CimIc));
+  struct CimIcImpl* impl = c_malloc (sizeof (struct CimIcImpl));
+  impl->vtable = &vtable;
+  return impl;
 }
 
-void cim_ic_free (CimIc* ic)
+void cim_ic_destroy (CimIcHandle ic)
 {
   cim_ref_count--;
 
-  if (cim_plugin)
-    cim_plugin_free_ic (ic);
+  if (cim_handle)
+    cim_plugin->vtable->destroy (ic);
   else
     free (ic);
 
   if (cim_ref_count == 0)
   {
-    if (cim_plugin)
-      dlclose (cim_plugin);
+    if (cim_handle)
+      dlclose (cim_handle);
 
-    cim_plugin         = nullptr;
-    cim_plugin_new_ic  = nullptr;
-    cim_plugin_free_ic = nullptr;
+    cim_handle = nullptr;
+    cim_plugin = nullptr;
   }
 }
 
-void cim_ic_focus_in (CimIc* ic)
+void cim_ic_focus_in (CimIcHandle handle)
 {
-  if (ic->focus_in)
-    ic->focus_in (ic);
+  if (cim_plugin->vtable->focus_in)
+    cim_plugin->vtable->focus_in (handle);
 }
 
-void cim_ic_focus_out (CimIc* ic)
+void cim_ic_focus_out (CimIcHandle ic)
 {
-  if (ic->focus_out)
-    ic->focus_out (ic);
+  if (cim_plugin->vtable->focus_out)
+    cim_plugin->vtable->focus_out (ic);
 }
 
-void cim_ic_reset (CimIc* ic)
+void cim_ic_reset (CimIcHandle ic)
 {
-  if (ic->reset)
-    ic->reset (ic);
+  if (cim_plugin->vtable->reset)
+    cim_plugin->vtable->reset (ic);
 }
 
-bool cim_ic_filter_event (CimIc* ic, const CimEvent* event)
+bool cim_ic_filter_event (CimIcHandle ic, const CimEvent* event)
 {
-  if (ic->filter_event)
-    return ic->filter_event (ic, event);
+  if (cim_plugin->vtable->filter_event)
+    cim_plugin->vtable->filter_event (ic, event);
 
   return false;
 }
 
-void cim_ic_set_cursor_pos (CimIc* ic, const CimRect* area)
+void cim_ic_set_cursor_pos (CimIcHandle ic, const CimRect* area)
 {
-  if (ic->set_cursor_pos)
-    ic->set_cursor_pos (ic, area);
+  if (cim_plugin->vtable->set_cursor_pos)
+    cim_plugin->vtable->set_cursor_pos (ic, area);
 }
 
-const CimPreedit* cim_ic_get_preedit (CimIc* ic)
+const CimPreedit* cim_ic_get_preedit (CimIcHandle ic)
 {
-  if (ic->get_preedit)
-    return ic->get_preedit (ic);
+  if (cim_plugin->vtable->get_preedit)
+    cim_plugin->vtable->get_preedit (ic);
 
   c_log_critical ("cim_ic_get_preedit() must be implemented in the IM plugin.");
 
@@ -194,37 +207,33 @@ const CimPreedit* cim_ic_get_preedit (CimIc* ic)
   return &preedit;
 }
 
-const CimCandidate* cim_ic_get_candidate (CimIc* ic)
+const CimCandidate* cim_ic_get_candidate (CimIcHandle ic)
 {
-  if (ic->get_candidate)
-    return ic->get_candidate (ic);
+  if (cim_plugin->vtable->get_candidate)
+    cim_plugin->vtable->get_candidate (ic);
 
   c_log_critical ("get_candidate() must be implemented in the IM plugin.");
   return nullptr;
 }
 
-void cim_ic_set_callbacks (CimIc* ic, ...)
+void cim_ic_set_callbacks (CimIcHandle ic,
+                           const CimCallbacks* callbacks,
+                           void* user_data)
 {
-  va_list ap;
-
-  va_start (ap, ic);
-
-  if (ic->set_vcallbacks)
-    ic->set_vcallbacks (ic, ap);
+  if (cim_plugin->vtable->set_callbacks)
+    cim_plugin->vtable->set_callbacks (ic, callbacks, user_data);
   else
-    c_log_critical ("set_vcallbacks() must be implemented in the IM plugin.");
-
-  va_end (ap);
+    c_log_critical ("set_callbacks() must be implemented in the IM plugin.");
 }
 
-void cim_ic_activate_candidate_item (CimIc* ic, int row, int col)
+void cim_ic_activate_candidate_item (CimIcHandle ic, uint32_t row, uint32_t col)
 {
-  if (ic->activate_candidate_item)
-    ic->activate_candidate_item (ic, row, col);
+  if (cim_plugin->vtable->activate_candidate_item)
+    cim_plugin->vtable->activate_candidate_item (ic, row, col);
 }
 
-void cim_ic_change_candidate_page (CimIc* ic, int page_index)
+void cim_ic_change_candidate_page (CimIcHandle ic, uint32_t page_index)
 {
-  if (ic->change_candidate_page)
-    ic->change_candidate_page (ic, page_index);
+  if (cim_plugin->vtable->change_candidate_page)
+    cim_plugin->vtable->change_candidate_page (ic, page_index);
 }
