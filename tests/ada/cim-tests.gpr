@@ -1,0 +1,53 @@
+-- ============================================================================
+-- cim-tests.gpr
+-- Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+-- SPDX-License-Identifier: 0BSD
+-- ============================================================================
+with "../../../ada-clair/clair.gpr";
+with "../../cim.gpr";
+
+project Cim.Tests is
+
+  Target_Name := external ("CIM_TARGET", "x86_64-unknown-freebsd");
+
+  Build_Profile_Name := external ("CIM_BUILD_PROFILE", "release");
+
+  type Build_Profile_Type is ("debug", "release");
+  Build_Profile : Build_Profile_Type :=
+    external ("CIM_BUILD_PROFILE", "release");
+
+  for Languages use ("Ada");
+
+  for Source_Dirs use (".");
+  for Object_Dir use
+    "../../build/obj/" & Target_Name & "/" & Build_Profile_Name &
+    "/tests/ada";
+  for Exec_Dir use
+    "../../build/bin/" & Target_Name & "/" & Build_Profile_Name;
+
+  for Main use ("cim_unit_tests.adb");
+
+  package Builder is
+    for Executable ("cim_unit_tests.adb") use "cim-unit-tests";
+  end Builder;
+
+  Ada_Common_Switches :=
+    ("-fPIC",
+     "-gnat2022",
+     "-gnata",
+     "-gnatwa",
+     "-gnatwe");
+
+  package Compiler is
+    case Build_Profile is
+      when "debug" =>
+        for Default_Switches ("Ada") use
+          Ada_Common_Switches & ("-O0", "-g");
+
+      when "release" =>
+        for Default_Switches ("Ada") use
+          Ada_Common_Switches & ("-O2");
+    end case;
+  end Compiler;
+
+end Cim.Tests;
