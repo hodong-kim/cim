@@ -3,9 +3,7 @@
 -- Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
 -- SPDX-License-Identifier: 0BSD
 -- ============================================================================
-with "../ada-clair/clair.gpr";
-
-project Cim is
+aggregate library project Cim is
 
   Target_Name := external ("CIM_TARGET", "x86_64-unknown-freebsd");
 
@@ -18,19 +16,16 @@ project Cim is
   Build_Profile_Name :=
     external ("CIM_BUILD_PROFILE", external ("BUILD", "release"));
 
-  type Build_Profile_Type is ("debug", "release");
-  Build_Profile : Build_Profile_Type :=
-    external ("CIM_BUILD_PROFILE", external ("BUILD", "release"));
-
   -- Default to static-pic for safe linkage.
-  type Library_Kind_Type is ("static", "static-pic", "relocatable");
+  type Library_Kind_Type is ("static-pic", "relocatable");
   Library_Type : Library_Kind_Type :=
     external ("CIM_LIBRARY_TYPE", external ("LIBRARY_TYPE", "static-pic"));
+
+  Symbol_Policy := "restricted";
 
   type Standalone_Kind_Type is ("standard", "encapsulated");
   Standalone_Type : Standalone_Kind_Type := "standard";
 
-  -- Use traditional case statement for broad gpr parser compatibility.
   case Library_Type is
     when "relocatable" =>
       Standalone_Type := "encapsulated";
@@ -38,64 +33,60 @@ project Cim is
       Standalone_Type := "standard";
   end case;
 
-  -- Supported languages.
-  for Languages use ("Ada", "C");
-
-  -- Source and output directories.
-  for Source_Dirs use ("src", "include");
+  for Project_Files use ("cim_objects.gpr");
   for Object_Dir use
-    "build/obj/" & Target_Name & "/" & Build_Profile_Name;
+    "build/obj/" & Target_Name & "/" & Build_Profile_Name & "/" &
+    Library_Type & "/aggregate";
   for Library_Dir use
     "build/lib/" & Target_Name & "/" & Build_Profile_Name;
 
-  -- Library creation settings.
   for Library_Name use "cim";
   for Library_Kind use Library_Type;
-
-  -- Standalone Library (SAL) configuration.
   for Library_Standalone use Standalone_Type;
+  for Interfaces use
+    ("cim.ads",
+     "cim-ic.ads",
+     "cim-c.ads",
+     "cim-runtime.ads",
+     "cim-c-api.c");
+  case Library_Type is
+    when "relocatable" =>
+      for Library_Auto_Init use "true";
 
-  for Library_Interface use
-    ("Cim", "Cim.IC", "Cim.C", "Cim.Runtime");
+      case Target_OS is
+        when "linux" | "Linux" | "android" | "Android" =>
+          Symbol_Policy := "unrestricted";
+          for Library_Options use
+            ("-Wl,--version-script=" & Project'Project_Dir & "cim-elf.map",
+             "-L" & Project'Project_Dir & "../ada-clair/build/lib/" &
+             Target_Name & "/" & Build_Profile_Name,
+             "-lclair",
+             "-ldl",
+             "-lpthread");
+        when "freebsd" | "FreeBSD" =>
+          Symbol_Policy := "unrestricted";
+          for Library_Options use
+            ("-Wl,--version-script=" & Project'Project_Dir & "cim-elf.map",
+             "-L" & Project'Project_Dir & "../ada-clair/build/lib/" &
+             Target_Name & "/" & Build_Profile_Name,
+             "-lclair",
+             "-lpthread");
+        when "darwin" | "Darwin" =>
+          for Library_Options use
+            ("-L" & Project'Project_Dir & "../ada-clair/build/lib/" &
+             Target_Name & "/" & Build_Profile_Name,
+             "-lclair",
+             "-lpthread");
+        when "windows" | "Windows" =>
+          for Library_Options use
+            ("-L" & Project'Project_Dir & "../ada-clair/build/lib/" &
+             Target_Name & "/" & Build_Profile_Name,
+             "-lclair");
+      end case;
+    when "static-pic" =>
+      null;
+  end case;
 
-  Ada_Common_Switches :=
-    ("-gnata",
-     "-gnatwa",
-     "-fPIC");
-
-  C_Common_Switches :=
-    ("-std=c23",
-     "-Wall",
-     "-Wextra",
-     "-fPIC",
-     "-I" & Project'Project_Dir & "include");
-
-  package Compiler is
-    case Build_Profile is
-      when "debug" =>
-        for Default_Switches ("Ada") use
-          Ada_Common_Switches & ("-O0", "-g");
-        for Default_Switches ("C") use
-          C_Common_Switches & ("-O0", "-g");
-
-      when "release" =>
-        for Default_Switches ("Ada") use
-          Ada_Common_Switches & ("-O2");
-        for Default_Switches ("C") use
-          C_Common_Switches & ("-O2");
-    end case;
-  end Compiler;
-
-  -- Linker options for OS-specific library dependencies.
-  package Library is
-    case Target_OS is
-      when "linux" | "Linux" | "android" | "Android" =>
-        for Library_Options use ("-ldl", "-lpthread");
-      when "freebsd" | "FreeBSD" | "darwin" | "Darwin" =>
-        for Library_Options use ("-lpthread");
-      when "windows" | "Windows" =>
-        for Library_Options use ();
-    end case;
-  end Library;
+  for Library_Symbol_Policy use Symbol_Policy;
 
 end Cim;

@@ -10,6 +10,9 @@
 #include <limits.h>
 #include <stddef.h>
 #include "c-candidate.h"
+#include "c-candidate-data.h"
+
+#define C_CANDIDATE_CELL_HEIGHT 27
 
 G_DEFINE_TYPE (TableItem, table_item, GTK_TYPE_BIN)
 
@@ -263,17 +266,16 @@ void c_candidate_show (CCandidate* ccandidate,
                        uint32_t    n_cols,
                        bool        show_aux)
 {
-  int gtk_n_rows;
-  int gtk_n_cols;
   int new_height;
   int new_width;
 
-  g_return_if_fail (ccandidate != NULL);
-  g_return_if_fail (n_rows <= (uint32_t) INT_MAX);
-  g_return_if_fail (n_cols <= (uint32_t) INT_MAX);
+  if (!ccandidate)
+    g_error ("Cim GTK candidate window is NULL");
 
-  gtk_n_rows = (int) n_rows;
-  gtk_n_cols = (int) n_cols;
+  if (!c_candidate_measure_window
+        (n_rows, n_cols, show_aux, C_CANDIDATE_CELL_HEIGHT,
+         &new_width, &new_height))
+    g_error ("Cim GTK candidate window size exceeds toolkit limits");
 
   if (ccandidate->n_rows != n_rows ||
       ccandidate->n_cols != n_cols)
@@ -284,7 +286,6 @@ void c_candidate_show (CCandidate* ccandidate,
     {
       for (uint32_t row = ccandidate->n_rows; row > n_rows; row--)
       {
-        g_return_if_fail (row - 1 <= (uint32_t) INT_MAX);
         gtk_grid_remove_row ((GtkGrid*) ccandidate->table,
                              (int) (row - 1));
       }
@@ -293,7 +294,6 @@ void c_candidate_show (CCandidate* ccandidate,
     {
       for (uint32_t row = ccandidate->n_rows; row < n_rows; row++)
       {
-        g_return_if_fail (row <= (uint32_t) INT_MAX);
         gtk_grid_insert_row ((GtkGrid*) ccandidate->table,
                              (int) row);
       }
@@ -303,7 +303,6 @@ void c_candidate_show (CCandidate* ccandidate,
     {
       for (uint32_t col = ccandidate->n_cols; col > n_cols; col--)
       {
-        g_return_if_fail (col - 1 <= (uint32_t) INT_MAX);
         gtk_grid_remove_column ((GtkGrid*) ccandidate->table,
                                 (int) (col - 1));
       }
@@ -312,7 +311,6 @@ void c_candidate_show (CCandidate* ccandidate,
     {
       for (uint32_t col = ccandidate->n_cols; col < n_cols; col++)
       {
-        g_return_if_fail (col <= (uint32_t) INT_MAX);
         gtk_grid_insert_column ((GtkGrid*) ccandidate->table,
                                 (int) col);
       }
@@ -330,14 +328,7 @@ void c_candidate_show (CCandidate* ccandidate,
   gtk_widget_show_all (ccandidate->window);
 
   /* FIXME: Fix how to get widget size. */
-  ccandidate->cell_height = 27;
-
-  if (show_aux)
-    new_height = ccandidate->cell_height * (gtk_n_rows + 1);
-  else
-    new_height = ccandidate->cell_height * gtk_n_rows;
-
-  new_width = ccandidate->cell_height * gtk_n_cols * 4;
+  ccandidate->cell_height = C_CANDIDATE_CELL_HEIGHT;
 
   gtk_widget_set_size_request (ccandidate->window, new_width, new_height);
   gtk_window_resize ((GtkWindow*) ccandidate->window, new_width, new_height);
@@ -385,9 +376,10 @@ static void cb_button_pressed (GObject*    object,
   int row = GPOINTER_TO_INT (g_object_get_data (object, "row"));
   int col = GPOINTER_TO_INT (g_object_get_data (object, "col"));
 
-  g_return_if_fail (ccandidate != NULL);
-  g_return_if_fail (row >= 0);
-  g_return_if_fail (col >= 0);
+  if (!ccandidate || row < 0 || col < 0 ||
+      (uint32_t) row >= ccandidate->n_rows ||
+      (uint32_t) col >= ccandidate->n_cols)
+    g_error ("Cim GTK candidate activation index is invalid");
 
   if (ccandidate->cb.activate_item)
     ccandidate->cb.activate_item (ccandidate,
@@ -397,22 +389,24 @@ static void cb_button_pressed (GObject*    object,
 }
 
 /**
- * @brief 후보창 테이블에서 특정 위치의 아이템을 안전하게 가져옵니다.
- * @param candidate 후보창 데이터 구조체 포인터
- * @param row 가져올 아이템의 행(row) 인덱스
- * @param col 가져올 아이템의 열(column) 인덱스
- * @return 성공 시 CimItem 포인터, 실패(인덱스 초과 등) 시 NULL
+ * @brief Return the item at one candidate-table position.
+ * @return Item pointer on success, or NULL for an invalid position.
  */
 static inline CimItem* c_candidate_get_item (const CimCandidate* candidate,
                                              uint32_t row,
                                              uint32_t col)
 {
-  // 경계 검사를 통해 메모리 안전성을 보장합니다.
-  if (candidate && candidate->table && row < candidate->n_rows && col < candidate->n_cols) {
-      // 평면화된 배열의 인덱스를 계산하여 해당 요소의 주소를 반환합니다.
-      return &candidate->table[row * candidate->n_cols + col];
-  }
-  return NULL;
+  gsize index;
+
+  if (!candidate || !candidate->table ||
+      row >= candidate->n_rows || col >= candidate->n_cols)
+    return NULL;
+
+  if ((gsize) row > (G_MAXSIZE - (gsize) col) / candidate->n_cols)
+    g_error ("Cim GTK candidate table index overflow");
+
+  index = (gsize) row * candidate->n_cols + col;
+  return &candidate->table[index];
 }
 
 void c_candidate_change (CCandidate* ccandidate,
@@ -424,15 +418,17 @@ void c_candidate_change (CCandidate* ccandidate,
   uint32_t visible_rows;
   uint32_t visible_cols;
 
-  g_return_if_fail (ccandidate != NULL);
-  g_return_if_fail (candidate != NULL);
-  g_return_if_fail (candidate->table != NULL || candidate->n_pages == 0);
-  g_return_if_fail (candidate->n_pages == 0 ||
-                    candidate->page_index < candidate->n_pages);
-  g_return_if_fail (candidate->n_rows <= (uint32_t) INT_MAX);
-  g_return_if_fail (candidate->n_cols <= (uint32_t) INT_MAX);
-  g_return_if_fail (ccandidate->n_rows <= (uint32_t) INT_MAX);
-  g_return_if_fail (ccandidate->n_cols <= (uint32_t) INT_MAX);
+  if (!ccandidate || !candidate)
+    g_error ("Cim GTK candidate state is NULL");
+
+  if ((candidate->n_pages != 0 &&
+       candidate->page_index >= candidate->n_pages) ||
+      (candidate->n_pages != 0 && !candidate->table) ||
+      candidate->n_rows > (uint32_t) INT_MAX ||
+      candidate->n_cols > (uint32_t) INT_MAX ||
+      ccandidate->n_rows > (uint32_t) INT_MAX ||
+      ccandidate->n_cols > (uint32_t) INT_MAX)
+    g_error ("Cim GTK candidate state is invalid");
 
   c_candidate_clear (ccandidate);
 
@@ -442,8 +438,8 @@ void c_candidate_change (CCandidate* ccandidate,
 
   value = gtk_range_get_value (range);
 
-  g_return_if_fail (value >= 0.0);
-  g_return_if_fail (value <= (gdouble) UINT32_MAX);
+  if (!(value >= 0.0 && value <= (gdouble) UINT32_MAX))
+    g_error ("Cim GTK candidate page value is invalid");
 
   if (candidate->page_index != (uint32_t) value)
     gtk_range_set_value (range, (gdouble) candidate->page_index);
@@ -463,7 +459,8 @@ void c_candidate_change (CCandidate* ccandidate,
     {
       CimItem* item = c_candidate_get_item (candidate, row, col);
 
-      g_return_if_fail (item != NULL);
+      if (!item)
+        g_error ("Cim GTK candidate table index is invalid");
 
       switch (item->type)
       {
@@ -475,9 +472,8 @@ void c_candidate_change (CCandidate* ccandidate,
             GtkStyleContext* style_context;
             GtkWidget* table_item;
 
-            g_return_if_fail (str != NULL);
-            g_return_if_fail (row <= (uint32_t) INT_MAX);
-            g_return_if_fail (col <= (uint32_t) INT_MAX);
+            if (!str)
+              g_error ("Cim GTK candidate item payload is NULL");
 
             label = gtk_label_new (str);
 
@@ -528,15 +524,13 @@ void c_candidate_change (CCandidate* ccandidate,
           break;
 
         default:
-          g_warning ("Unknown type: %d", (int) item->type);
+          g_error ("Cim GTK candidate item type is invalid");
       }
     }
   }
 
   if (candidate->aux_text)
   {
-    g_return_if_fail (candidate->aux_cursor_pos <= (uint32_t) INT_MAX);
-
     gtk_entry_set_text ((GtkEntry*) ccandidate->entry, candidate->aux_text);
     gtk_editable_set_position ((GtkEditable*) ccandidate->entry,
                                (int) candidate->aux_cursor_pos);
@@ -547,14 +541,16 @@ void c_candidate_change (CCandidate* ccandidate,
 
 void c_candidate_select (CCandidate* ccandidate, const CimSelection* selection)
 {
-  g_return_if_fail (ccandidate != NULL);
-  g_return_if_fail (selection != NULL);
-  g_return_if_fail (selection->start_row <= selection->end_row);
-  g_return_if_fail (selection->start_col <= selection->end_col);
-  g_return_if_fail (selection->end_row < ccandidate->n_rows);
-  g_return_if_fail (selection->end_col < ccandidate->n_cols);
-  g_return_if_fail (ccandidate->n_rows <= (uint32_t) INT_MAX);
-  g_return_if_fail (ccandidate->n_cols <= (uint32_t) INT_MAX);
+  const char* validation_error;
+
+  if (!ccandidate)
+    g_error ("Cim GTK candidate window is NULL");
+
+  validation_error = c_candidate_selection_validation_error
+    (selection, ccandidate->n_rows, ccandidate->n_cols);
+  if (validation_error)
+    g_error ("Cim GTK candidate selection is invalid: %s",
+             validation_error);
 
   for (uint32_t row = 0; row < ccandidate->n_rows; row++)
     for (uint32_t col = 0; col < ccandidate->n_cols; col++)

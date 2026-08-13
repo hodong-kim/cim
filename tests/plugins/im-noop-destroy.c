@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: 0BSD
  *
  * Test-only plugin whose destroy callback intentionally leaves the supplied
- * handle untouched. This permits deterministic reference-underflow testing
- * without dereferencing or freeing a stale handle.
+ * handle untouched. This permits deterministic stale-handle contract testing
+ * without dereferencing or freeing the handle.
  */
 
 #include "cim.h"

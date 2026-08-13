@@ -12,9 +12,33 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <sched.h>
+#endif
+
 /* ========================================================================= *
  * C helper
  * ========================================================================= */
+
+void *
+cim_get_thread_token_c (void)
+{
+  static _Thread_local unsigned char token;
+
+  return &token;
+}
+
+void
+cim_thread_yield_c (void)
+{
+#if defined(_WIN32)
+  (void) SwitchToThread ();
+#else
+  (void) sched_yield ();
+#endif
+}
 
 void
 cim_contract_violation_c (const char *message)

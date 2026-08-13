@@ -7,6 +7,7 @@ with Ada.Command_Line;
 with Ada.Exceptions;
 
 with Clair.Test.Reporter;
+with Cim_Process_Tests;
 with Cim_Runtime_Tests;
 with Cim_Tests;
 
@@ -15,10 +16,11 @@ procedure cim_unit_tests is
 begin
   Clair.Test.Reporter.configure_from_command_line (reporter);
   Clair.Test.Reporter.print_header (reporter);
-  Clair.Test.Reporter.set_suite_count (reporter, 5);
+  Clair.Test.Reporter.set_suite_count (reporter, 6);
 
   Cim_Tests.run (reporter);
   Cim_Runtime_Tests.run (reporter);
+  Cim_Process_Tests.run (reporter);
 
   Clair.Test.Reporter.print_summary (reporter);
 

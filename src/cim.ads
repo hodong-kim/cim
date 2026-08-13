@@ -19,7 +19,7 @@ package Cim is
 
   CIM_MAJOR_VERSION : constant Interfaces.C.unsigned := 2;
   CIM_MINOR_VERSION : constant Interfaces.C.unsigned := 1;
-  CIM_MICRO_VERSION : constant Interfaces.C.unsigned := 0;
+  CIM_MICRO_VERSION : constant Interfaces.C.unsigned := 1;
 
   ---------------------------------------------------------------------------
   -- Enums
@@ -107,6 +107,8 @@ package Cim is
   type CimEvent_Access is access constant CimEvent
   with convention => c;
 
+  -- Text attribute positions and lengths are counted in Unicode scalar
+  -- values, not UTF-8 bytes or grapheme clusters.
   type CimTextAttr is record
     attr_type : CimTextAttrType;
     pos       : Interfaces.C.unsigned;
@@ -117,6 +119,9 @@ package Cim is
   type CimTextAttr_Access is access all CimTextAttr
   with convention => c;
 
+  -- cursor_pos is a zero-based insertion position counted in Unicode scalar
+  -- values. It equals the number of scalar values before the cursor and shall
+  -- not exceed the scalar-value count of text.
   type CimPreedit is record
     text       : Interfaces.C.Strings.chars_ptr;
     attrs      : CimTextAttr_Access;

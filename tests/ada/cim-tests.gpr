@@ -3,7 +3,7 @@
 -- Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
 -- SPDX-License-Identifier: 0BSD
 -- ============================================================================
-with "../../../ada-clair/clair.gpr";
+with "../../../ada-clair/tests/clair_test_support.gpr";
 with "../../cim.gpr";
 
 project Cim.Tests is
@@ -16,12 +16,16 @@ project Cim.Tests is
   Build_Profile : Build_Profile_Type :=
     external ("CIM_BUILD_PROFILE", "release");
 
+  type Library_Kind_Type is ("static-pic", "relocatable");
+  Library_Type : Library_Kind_Type :=
+    external ("CIM_LIBRARY_TYPE", "static-pic");
+
   for Languages use ("Ada");
 
   for Source_Dirs use (".");
   for Object_Dir use
     "../../build/obj/" & Target_Name & "/" & Build_Profile_Name &
-    "/tests/ada";
+    "/" & Library_Type & "/tests/ada";
   for Exec_Dir use
     "../../build/bin/" & Target_Name & "/" & Build_Profile_Name;
 

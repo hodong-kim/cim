@@ -41,7 +41,7 @@ extern "C" {
  */
 #define CIM_MAJOR_VERSION  (uint32_t) 2
 #define CIM_MINOR_VERSION  (uint32_t) 1
-#define CIM_MICRO_VERSION  (uint32_t) 0
+#define CIM_MICRO_VERSION  (uint32_t) 1
 
 /**
  * @brief Cim text encoding model.
@@ -52,7 +52,9 @@ extern "C" {
 /**
  * @brief Threading model.
  *
- * Cim APIs and callbacks may be called from arbitrary threads.
+ * Cim APIs and callbacks may be invoked from arbitrary threads. This does not
+ * make one input context concurrently callable; see the input-context handle
+ * contract below.
  */
 
 #ifdef USE_C23_ENUM
@@ -94,8 +96,8 @@ typedef uint32_t CimTextAttrType;
 typedef struct _CimTextAttr CimTextAttr;
 struct _CimTextAttr {
   CimTextAttrType type;
-  uint32_t pos;     /* starting position to apply attribute in characters */
-  uint32_t n_chars; /* number of characters to apply attribute to */
+  uint32_t pos;     /* starting Unicode scalar-value index */
+  uint32_t n_chars; /* number of Unicode scalar values */
 };
 
 /**
@@ -105,13 +107,19 @@ struct _CimTextAttr {
  * cim_ic_get_preedit() will be called.
  *
  * The @a text field is always UTF-8 encoded.
+ *
+ * Attribute positions and lengths are counted in Unicode scalar values.
+ * The @a cursor_pos field is a zero-based insertion position counted in
+ * Unicode scalar values. It equals the number of scalar values before the
+ * cursor and must not exceed the scalar-value count of @a text. These values
+ * are not UTF-8 byte offsets or grapheme-cluster indices.
  */
 typedef struct _CimPreedit CimPreedit;
 struct _CimPreedit {
   char* text;
   CimTextAttr* attrs;
   uint32_t attrs_len;
-  uint32_t cursor_pos;
+  uint32_t cursor_pos; /* Unicode scalar offset */
 };
 
 /**
@@ -125,9 +133,9 @@ struct _CimPreedit {
 typedef struct _CimSurround CimSurround;
 struct _CimSurround {
   const char* text;
-  uint32_t    len;
-  uint32_t    cursor_pos;
-  uint32_t    anchor_pos;
+  uint32_t    len;        /* UTF-8 byte length */
+  uint32_t    cursor_pos; /* Unicode scalar offset */
+  uint32_t    anchor_pos; /* Unicode scalar offset */
 };
 
 typedef struct _CimRect CimRect;
@@ -209,23 +217,7 @@ enum _CimNotificationType : uint32_t {
 #else
 enum _CimNotificationType  {
 #endif
-  /* User Input Feedback */
-  CIM_NOTIFICATION_COMPOSE_CANCELLED,
-/* examples:
-  CIM_NOTIFICATION_INVALID_KEY_PRESS,
-  CIM_NOTIFICATION_SELECTION_WRAPPED,
-  // State and Mode Changes
-  CIM_NOTIFICATION_INPUT_MODE_CHANGED,
-  CIM_NOTIFICATION_HANJA_MODE_ACTIVATED,
-  CIM_NOTIFICATION_FULL_WIDTH_MODE_CHANGED,
-  CIM_NOTIFICATION_COMPOSITION_CLEARED_AUTOMATICALLY,
-  // Engine and System Events
-  CIM_NOTIFICATION_CONFIG_RELOADED,
-  CIM_NOTIFICATION_DICTIONARY_UPDATED,
-  // Error and Warning Conditions
-  CIM_NOTIFICATION_DICTIONARY_LOOKUP_FAILED,
-  CIM_NOTIFICATION_MAX_PREEDIT_LENGTH_REACHED
-*/
+  CIM_NOTIFICATION_COMPOSE_CANCELLED
 };
 #ifdef USE_C23_ENUM
 typedef enum _CimNotificationType  CimNotificationType;
@@ -238,6 +230,15 @@ typedef struct _CimCallbacks CimCallbacks;
  * @brief Callback table provided by the Cim client.
  *
  * All text exchanged through these callbacks is UTF-8 encoded.
+ *
+ * The client owns every callback table and user_data pointer passed to
+ * cim_ic_set_callbacks(). A plugin may retain those pointers. The client must
+ * keep them valid until cim_ic_destroy() returns for the input context.
+ *
+ * Callbacks may be invoked from arbitrary threads. Once the plugin's destroy
+ * callback begins for an input context, the plugin must not start a new client
+ * callback for that context. Before destroy returns, every callback already
+ * started for that context must have returned.
  */
 struct _CimCallbacks {
   void (*preedit_start)     (CimIcHandle ic, void* user_data);
@@ -261,8 +262,23 @@ struct _CimCallbacks {
   void (*commit)            (CimIcHandle ic,
                              const char* text,
                              void* user_data);
-  /* Do not free CimSurround and its text. The text is always UTF-8 encoded. */
+  /**
+   * @brief Retrieve surrounding text synchronously.
+   *
+   * The returned object and text remain owned by the client and must not be
+   * modified or freed by the plugin.
+   *
+   * Result-returning callbacks are synchronous. A client may marshal them to
+   * an owning thread and block the callback thread until that thread produces
+   * the result. The plugin must not hold a dependency which prevents that
+   * owning thread from making progress while waiting for the callback result.
+   */
   const CimSurround* (*get_surround) (CimIcHandle ic, void* user_data);
+  /**
+   * @brief Delete surrounding text synchronously.
+   *
+   * The synchronous progress rule documented for get_surround also applies.
+   */
   bool (*delete_surround)   (CimIcHandle ic,
                              int32_t  offset,
                              uint32_t n_chars,
@@ -405,20 +421,37 @@ struct _CimPlugin {
    */
   const CimInfo* (*get_info) (void);
 /**
- * @brief Initialize plugin-global state.
+ * @brief Initialize one Cim host attachment to this plugin.
  *
- * This function is called once when the plugin is loaded by libcim,
- * before any input context is created.
+ * Each independent Cim runtime calls this function once before it creates any
+ * input context through this descriptor. A process may contain multiple Cim
+ * runtimes, including runtimes embedded in application plugins. The same
+ * plugin DSO may therefore receive multiple calls, including concurrent calls
+ * from different hosts.
+ *
+ * Plugin-global state shared between host attachments must be synchronized.
+ * This callback must not call back into Cim host APIs.
  *
  * @retval 0 Initialization succeeded.
  * @retval nonzero Initialization failed.
  *
- * If this function returns a nonzero value, the plugin is not loaded
- * and #fini is not called.
+ * During orderly teardown, every successful call has one matching #fini call.
+ * If this function returns a nonzero value, #fini is not called for that host
+ * attachment.
  *
  * This callback is optional. If NULL, initialization is treated as successful.
  */
   int  (*init) (void);
+  /**
+   * @brief Finalize one successful Cim host attachment.
+   *
+   * The host calls this function after all input contexts owned by that host
+   * have been destroyed and no vtable call from that host remains in flight.
+   * Calls from independent hosts may occur concurrently. This callback must
+   * not call back into Cim host APIs.
+   *
+   * This callback is optional.
+   */
   void (*fini) (void);
   CimIcVTable* vtable;
   void* reserved[2];
@@ -450,86 +483,68 @@ typedef enum _CimError CimError;
 typedef uint32_t CimError;
 #endif
 
+/**
+ * @brief Input-context handle contract.
+ *
+ * Unless stated otherwise, every API that takes a #CimIcHandle requires a
+ * live, non-NULL handle returned by cim_ic_create(). A handle becomes invalid
+ * when cim_ic_destroy() begins and must not be used again.
+ *
+ * Calls using the same input-context handle must not overlap, including
+ * reentrant calls. The caller may use a handle from different threads, but
+ * must serialize those calls. Different input contexts may be used
+ * concurrently.
+ */
+
+/**
+ * @brief Create an input context.
+ *
+ * @return A live input-context handle, or NULL on a recoverable failure. Use
+ *         cim_get_last_error() to inspect the failure.
+ */
 CimIcHandle cim_ic_create (void);
 
 /**
  * @brief Destroy an input context.
  *
- * @param ic A valid live input context. This value must not be NULL.
- *
- * Passing NULL is a contract violation and terminates the process.
+ * The handle is invalid once this call begins.
  */
 void cim_ic_destroy (CimIcHandle ic);
 
-/**
- * @brief Notify an input context that it gained focus.
- *
- * @param ic A valid live input context. This value must not be NULL.
- *
- * Passing NULL is a contract violation and terminates the process.
- */
+/** @brief Notify an input context that it gained focus. */
 void cim_ic_focus_in (CimIcHandle ic);
 
-/**
- * @brief Notify an input context that it lost focus.
- *
- * @param ic A valid live input context. This value must not be NULL.
- *
- * Passing NULL is a contract violation and terminates the process.
- */
+/** @brief Notify an input context that it lost focus. */
 void cim_ic_focus_out (CimIcHandle ic);
 
-/**
- * @brief Reset an input context.
- *
- * @param ic A valid live input context. This value must not be NULL.
- *
- * Passing NULL is a contract violation and terminates the process.
- */
+/** @brief Reset an input context. */
 void cim_ic_reset (CimIcHandle ic);
 
 /**
  * @brief Filter an input event.
  *
- * This function asks Cim to handle the given event.
- *
- * @param ic A valid live input context. This value must not be NULL.
- * @param event A valid event to be filtered. This value must not be NULL.
- *
- * Passing NULL for either parameter is a contract violation and terminates
- * the process.
+ * @param event A valid event. This value must not be NULL.
  *
  * @retval true  The event was consumed by Cim or the active plugin.
- *               The caller should not process the event further.
- * @retval false The event was not consumed by Cim or the active plugin.
- *               The caller should continue normal event processing.
+ * @retval false The caller should continue normal event processing.
  *
- * This return value does not indicate success or failure. It only indicates
- * whether the event was consumed.
+ * The return value reports consumption, not operation success or failure.
  */
-bool  cim_ic_filter_event   (CimIcHandle ic, const CimEvent* event);
+bool cim_ic_filter_event (CimIcHandle ic, const CimEvent* event);
 
 /**
  * @brief Update the cursor rectangle for an input context.
  *
- * @param ic A valid live input context. This value must not be NULL.
  * @param area A valid cursor rectangle. This value must not be NULL.
- *
- * Passing NULL for either parameter is a contract violation and terminates
- * the process.
  */
 void cim_ic_set_cursor_pos (CimIcHandle ic, const CimRect* area);
 
 /**
  * @brief Set callbacks for an input context.
  *
- * @param ic A valid live input context. This value must not be NULL.
  * @param callbacks A valid callback table. This value must not be NULL.
  * @param user_data Optional opaque data passed to callbacks. This value may
  *                  be NULL.
- *
- * Passing NULL for either @p ic or @p callbacks is a contract violation and
- * terminates the process.
  */
 void cim_ic_set_callbacks (CimIcHandle ic,
                            const CimCallbacks* callbacks,
@@ -538,48 +553,23 @@ void cim_ic_set_callbacks (CimIcHandle ic,
 /**
  * @brief Get the current preedit state.
  *
- * @param ic A valid live input context. This value must not be NULL.
- *
- * @return The current preedit state, or NULL when no preedit state is
- *         available.
- *
- * Passing NULL for @p ic is a contract violation and terminates the process.
+ * @return The current preedit state, or NULL when none is available.
  */
 const CimPreedit* cim_ic_get_preedit (CimIcHandle ic);
 
 /**
  * @brief Get the current candidate state.
  *
- * @param ic A valid live input context. This value must not be NULL.
- *
- * @return The current candidate state, or NULL when no candidate state is
- *         available.
- *
- * Passing NULL for @p ic is a contract violation and terminates the process.
+ * @return The current candidate state, or NULL when none is available.
  */
 const CimCandidate* cim_ic_get_candidate (CimIcHandle ic);
 
-/**
- * @brief Activate a candidate item.
- *
- * @param ic A valid live input context. This value must not be NULL.
- * @param row Candidate row index.
- * @param col Candidate column index.
- *
- * Passing NULL for @p ic is a contract violation and terminates the process.
- */
+/** @brief Activate a candidate item. */
 void cim_ic_activate_candidate_item (CimIcHandle ic,
                                      uint32_t row,
                                      uint32_t col);
 
-/**
- * @brief Change the current candidate page.
- *
- * @param ic A valid live input context. This value must not be NULL.
- * @param page_index Candidate page index.
- *
- * Passing NULL for @p ic is a contract violation and terminates the process.
- */
+/** @brief Change the current candidate page. */
 void cim_ic_change_candidate_page (CimIcHandle ic,
                                    uint32_t page_index);
 

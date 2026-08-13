@@ -1,0 +1,68 @@
+-- ============================================================================
+-- cim_objects.gpr
+-- Copyright (c) 2026 Hodong Kim <hodong@nimfsoft.com>
+-- SPDX-License-Identifier: 0BSD
+-- ============================================================================
+with "../ada-clair/clair.gpr";
+
+project Cim_Objects is
+
+  Target_Name := external ("CIM_TARGET", "x86_64-unknown-freebsd");
+
+  Build_Profile_Name :=
+    external ("CIM_BUILD_PROFILE", external ("BUILD", "release"));
+
+  type Build_Profile_Type is ("debug", "release");
+  Build_Profile : Build_Profile_Type :=
+    external ("CIM_BUILD_PROFILE", external ("BUILD", "release"));
+
+  type Library_Kind_Type is ("static-pic", "relocatable");
+  Library_Type : Library_Kind_Type :=
+    external ("CIM_LIBRARY_TYPE", external ("LIBRARY_TYPE", "static-pic"));
+
+  for Languages use ("Ada", "C");
+  for Source_Dirs use ("src", "include");
+  for Object_Dir use
+    "build/obj/" & Target_Name & "/" & Build_Profile_Name & "/" &
+    Library_Type;
+
+  C_Runtime_Switches := ("-DCIM_STATIC_RUNTIME=1");
+
+  case Library_Type is
+    when "relocatable" =>
+      C_Runtime_Switches := ("-DCIM_STATIC_RUNTIME=0");
+    when "static-pic" =>
+      null;
+  end case;
+
+  Ada_Common_Switches :=
+    ("-gnata",
+     "-gnatwa",
+     "-fPIC");
+
+  C_Common_Switches :=
+    ("-std=c23",
+     "-Wall",
+     "-Wextra",
+     "-fPIC",
+     "-I" & Project'Project_Dir & "include");
+
+  package Compiler is
+    case Build_Profile is
+      when "debug" =>
+        for Default_Switches ("Ada") use
+          Ada_Common_Switches & ("-O0", "-g");
+        for Default_Switches ("C") use
+          C_Common_Switches & C_Runtime_Switches &
+          ("-O0", "-g");
+
+      when "release" =>
+        for Default_Switches ("Ada") use
+          Ada_Common_Switches & ("-O2");
+        for Default_Switches ("C") use
+          C_Common_Switches & C_Runtime_Switches &
+          ("-O2");
+    end case;
+  end Compiler;
+
+end Cim_Objects;

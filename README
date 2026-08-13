@@ -1,34 +1,49 @@
 # Cim (Common Input Method)
 
-Cim stands for **Common Input Method**.
+Cim is a toolkit-independent input method API for Linux and FreeBSD. It
+provides a common C ABI for input method plugins and an Ada-facing API for Ada
+applications.
 
-Cim is a toolkit-independent input method API designed to unify text input integration across Linux and BSD systems.
-
-Applications and toolkits currently rely on multiple input method interfaces such as **XIM, Gtk-IM, Qt-IM, and Wayland-IM**.
-Cim provides a common C API that input method **plugins** expose in a consistent way.
-
-Because Cim is implemented as a small C library with minimal dependencies, it can be used by GUI toolkits, terminal applications, console programs, sandboxed applications, and software written in different programming languages.
+The current tree contains the Cim core, GTK 3 and Qt 6 input method bridges,
+and a native libhangul sample plugin.
 
 ## Goals
 
 Cim is designed to provide:
 
-* a toolkit-independent input method API
-* a simple plugin architecture
-* low integration cost for existing IME implementations
-* compatibility with existing input method ecosystems
+- a toolkit-independent input method API;
+- a simple plugin architecture;
+- low integration cost for input method implementations; and
+- stable C ABI boundaries that can be used from different languages.
 
-## Build Targets
+## Build
 
-The Rake build system separates generated artifacts by target and profile:
+The Rake build separates object artifacts by target, profile, and library type,
+and library and binary artifacts by target and profile:
 
 ```text
-build/obj/<target>/<profile>
+build/obj/<target>/<profile>/<library-type>
 build/lib/<target>/<profile>
 build/bin/<target>/<profile>
 ```
 
-Use `TARGET` to select the toolchain target triple:
+Cim supports two library types:
+
+- `static-pic` is the default and builds the position-independent static
+  `libcim.a`. This is the only supported static form and may be embedded in a
+  shared module.
+- `relocatable` builds `libcim.so`.
+
+Non-PIC `static` builds are unsupported.
+
+```sh
+rake build static-pic
+rake build relocatable
+rake test static-pic
+rake test relocatable
+```
+
+Use `TARGET` or `CIM_TARGET` to select the toolchain target triple:
 
 ```sh
 rake info TARGET=x86_64-linux-gnu
@@ -36,301 +51,87 @@ rake cim TARGET=x86_64-linux-musl
 rake cim TARGET=x86_64-unknown-freebsd PROFILE=debug
 ```
 
-Linux libc variants are treated as distinct ABIs. For example,
+Linux libc variants are distinct ABI targets. For example,
 `x86_64-linux-gnu` and `x86_64-linux-musl` do not share native build context,
 pkg-config results, or probe artifacts.
 
-## Basic Architecture
+## Architecture
 
 ```text
 Application / Toolkit
-            │
-            ▼
-        libcim.so
-   (public Cim API library)
-            │
-            ▼
- ~/.config/cim/plugin
-(active plugin selection link)
-            │
-            ▼
-       Cim plugin
-  (im-ibus.so, im-fcitx.so,
-   im-nimf.so, im-libhangul.so, ...)
-            │
-            ├───────────────► Bridge to existing IM framework
-            │                 (ibus, fcitx, nimf, uim, ...)
-            │
-            ├───────────────► Native IME engine
-            │                 (libhangul, librime, ...)
-            │
-            └───────────────► Service or daemon plugin
-                              (cimd, remote service, ...)
-```
-
-## Components
-
-### `libcim.so`
-
-The public Cim API library.
-Applications link against this library and use the API defined in `cim.h`.
-
-### `cim.h`
-
-The public Cim C API.
-
-It defines:
-
-* the input context interface
-* event structures
-* preedit and candidate data
-* callback interfaces
-* plugin structures
-
-### `~/.config/cim/plugin`
-
-A symbolic link selecting the **active Cim plugin**.
-
-This is not the public Cim library (`libcim.so`).
-It only selects which plugin module should be loaded by `libcim`.
-
-Example:
-
-```sh
-mkdir -p ~/.config/cim
-ln -sf /usr/lib/input.d/im-fcitx.so ~/.config/cim/plugin
-```
-
-## Plugins
-
-Plugins implement the Cim input context API.
-
-Examples:
-
-```text
-/usr/lib/input.d/im-sample.so
-/usr/lib/input.d/im-nimf.so
-/usr/lib/input.d/im-ibus.so
-/usr/lib/input.d/im-uim.so
-/usr/lib/input.d/im-fcitx.so
-```
-
-## Minimal Plugin Example
-
-Plugins must export a global symbol named `cim_plugin`.
-This symbol is discovered by `libcim.so` using `dlsym()`.
-
-The following example shows the smallest valid Cim plugin.
-Real plugins typically implement more VTable functions.
-
-```c
-#include "cim.h"
-
-static CimIcHandle
-dummy_create(void)
-{
-  return NULL;
-}
-
-static void
-dummy_destroy(CimIcHandle ic)
-{
-}
-
-static CimIcVTable vtable = {
-  .create = dummy_create,
-  .destroy = dummy_destroy
-};
-
-static const CimInfo info = {
-  .name = "dummy",
-  .desc = "Example Cim plugin"
-};
-
-static const CimInfo*
-get_info(void)
-{
-  return &info;
-}
-
-CimPlugin cim_plugin = {
-  .cim_api_major = CIM_MAJOR_VERSION,
-  .get_info = get_info,
-  .vtable = &vtable
-};
-```
-
-## Plugin Types
-
-Cim plugins may be implemented in several ways.
-
-### Native engine plugins
-
-Implement a full IME engine directly.
-
-Examples:
-
-* libhangul
-* librime
-* libanthy
-
-### Framework bridge plugins
-
-Connect Cim to existing input method frameworks.
-
-Examples:
-
-* ibus
-* fcitx
-* uim
-
-### Service-backed plugins
-
-Communicate with a daemon or external service.
-
-Examples:
-
-* nimf
-* cimd
-* remote IM services
-
-## Low-Friction Integration
-
-One of Cim’s main goals is to reduce integration cost.
-
-Many existing IME libraries and input method projects already provide core input-context logic.
-In many cases, a Cim plugin can be implemented with only a small adaptation layer that exposes the existing functionality through `CimIcVTable` and `cim_plugin`.
-
-This means Cim integration may be practical for:
-
-* existing IME libraries such as **libhangul, librime, libanthy, and libpinyin**
-* existing input method frameworks such as **ibus, fcitx, nimf, and uim**
-* standalone bridge modules
-* native engines implemented directly for Cim
-
-## Runtime Model
-
-When a `CimIcHandle` is created:
-
-1. `libcim.so` resolves the active plugin from `~/.config/cim/plugin`
-2. the selected plugin module is loaded
-3. input-context operations are delegated through `CimIcVTable`
-
-A single plugin module may create multiple input contexts.
-When the last input context is destroyed, the plugin module is unloaded automatically.
-
-## ABI Compatibility
-
-Cim maintains a stable plugin ABI.
-
-Plugins interact with `libcim.so` through the `CimPlugin`
-structure defined in `cim.h`.
-
-Compatibility rules:
-
-- `CIM_MAJOR_VERSION` changes only when ABI compatibility is broken.
-- Minor and micro versions preserve ABI compatibility.
-- Plugins compiled for a compatible major version continue to work.
-
-`libcim.so` verifies the `cim_api_major` field when loading a plugin.
-Plugins compiled against an incompatible major version will be rejected.
-
-## Toolkit Integration
-
-Even when toolkits do not adopt Cim directly, bridge modules can be used.
-
-Typical environment variables:
-
-```sh
-QT_IM_MODULE="cim"
-GTK_IM_MODULE="cim"
-XMODIFIERS="@im=cim"
-```
-
-Example bridge modules:
-
-```text
-/usr/local/lib/gtk-4.0/4.0.0/immodules/libim-cim-gtk4.so
-/usr/local/lib/gtk-2.0/2.10.0/immodules/im-cim-gtk2.so
-/usr/local/lib/gtk-3.0/3.0.0/immodules/im-cim-gtk3.so
-/usr/local/lib/qt5/plugins/platforminputcontexts/libqt5im-cim.so
-/usr/local/lib/qt6/plugins/platforminputcontexts/libqt6im-cim.so
-```
-
-## Daemon-Based Environments
-
-Some environments such as XIM or Wayland input methods require inter-process communication.
-
-For such systems, Cim can use a daemon such as `cimd`.
-
-Example:
-
-```text
-/usr/local/bin/cimd
-/usr/local/lib/cimd/plugins/cim-xim.so
-/usr/local/lib/cimd/plugins/cim-wayland.so
-```
-
-## Building and Testing
-
-Build the project:
-
-`sh
-rake build
-`
-
-Run the test suite:
-
-`sh
-rake run-tests
-`
-
-The test suite builds and runs:
-
-* `bin/test-cim`
-* `bin/test-im-libhangul`
-
-### Selecting a plugin for testing
-
-By default, `libcim.so` loads the active plugin from:
-
-`text
+        |
+        v
+libcim.a / libcim.so
+        |
+        v
 ~/.config/cim/plugin
-`
+        |
+        v
+Cim plugin
+```
 
-For testing, you can override the plugin path with `CIM_PLUGIN`:
+`~/.config/cim/plugin` is a symbolic link selecting the active plugin. The
+`CIM_PLUGIN` environment variable may override that path for testing or a
+controlled deployment.
 
-`sh
-CIM_PLUGIN="$(pwd)/lib/im-libhangul.so" ./bin/test-im-libhangul
-`
+When the first input context is created, Cim loads the selected plugin and
+initializes the host attachment. A plugin may create multiple input contexts.
+Cim finalizes and unloads the plugin after the last input context is destroyed.
 
-This avoids changing the user’s `~/.config/cim/plugin` symlink during tests.
+## Plugin ABI
 
-### Sample plugin
+Plugins export a global `CimPlugin` object named `cim_plugin`. The plugin ABI is
+defined by `include/cim.h`.
 
-`lib/im-libhangul.so` is a sample Cim plugin built from:
+The plugin descriptor and vtable must remain valid while the plugin is loaded.
+The vtable `create` and `destroy` callbacks are required. Plugin `init` and
+`fini` callbacks are optional and form a balanced attachment lifecycle when
+provided.
 
-`text
-modules/samples/im-libhangul/im-libhangul.c
-`
+ABI compatibility follows the public version fields:
 
-It is intended to demonstrate how a native engine plugin can implement the Cim API.
+- changing `CIM_MAJOR_VERSION` permits an ABI break;
+- minor and micro releases preserve ABI compatibility; and
+- Cim rejects a plugin whose major version is incompatible.
+
+See `modules/samples/im-libhangul/im-libhangul.c` for the current native sample
+plugin.
+
+## Toolkit Bridges
+
+The current tree provides GTK 3 and Qt 6 bridges:
+
+```text
+modules/bridges/gtk3
+modules/bridges/qt6
+```
+
+Typical selection variables are:
+
+```sh
+GTK_IM_MODULE="cim"
+QT_IM_MODULE="cim"
+```
+
+The bridge modules embed `libcim.a` in the default `static-pic` configuration
+and keep their embedded Cim runtime private from the surrounding process.
+
+## Testing
+
+Run the consolidated suite with:
+
+```sh
+rake test static-pic
+rake test relocatable
+```
+
+For direct application testing, select a plugin without changing the
+`~/.config/cim/plugin` link by setting an absolute plugin path:
+
+```sh
+CIM_PLUGIN=/absolute/path/to/im-libhangul.so application
+```
 
 ## License
 
-Copyright (C) 2023-2026 Hodong Kim [hodong@nimfsoft.com](mailto:hodong@nimfsoft.com)
-
-Permission to use, copy, modify, and/or distribute this software for any
-purpose with or without fee is hereby granted.
-
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
-## Contact
-
-Email: [hodong@nimfsoft.com](mailto:hodong@nimfsoft.com)
+Cim is distributed under the 0BSD license. See `LICENSE`.

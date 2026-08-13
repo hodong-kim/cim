@@ -162,6 +162,19 @@ def pkg_config_cflags(*packages)
               *packages).split
 end
 
+def external_header_cflags(flags)
+  flags.flat_map do |flag|
+    if flag.start_with?("-I") && flag.length > 2
+      [
+        "-isystem",
+        flag.delete_prefix("-I")
+      ]
+    else
+      [flag]
+    end
+  end
+end
+
 def pkg_config_libs(*packages)
   sh_capture("pkg-config",
              "--libs",
@@ -282,80 +295,14 @@ BUILD[:libdir] =
 BUILD[:datadir] =
   File.join(BUILD[:prefix], "share")
 
-BUILD[:gettext_package] =
-  "cim"
-
 BUILD[:locale_dir] =
   File.join(BUILD[:datadir], "locale")
 
 BUILD[:input_d_dir] =
   File.join(BUILD[:libdir], "input.d")
 
-BUILD[:version] =
-  "2.1.0"
-
-BUILD[:libcim_major] =
-  2
-
-BUILD[:libcim_minor] =
-  1
-
-BUILD[:libcim_micro] =
-  0
-
-BUILD[:libcim_version] =
-  "#{BUILD[:libcim_major]}.#{BUILD[:libcim_minor]}.#{BUILD[:libcim_micro]}"
-
-case TARGET_OS
-when "freebsd"
-  BUILD[:pkgconfig_dir] =
-    File.join(BUILD[:prefix], "libdata", "pkgconfig")
-
-  BUILD[:intl_cflag] =
-    "-I#{File.join(BUILD[:prefix], "include")}"
-
-  BUILD[:intl_ldflag] =
-    "-L#{BUILD[:libdir]} -lintl"
-
-  BUILD[:dl_ldflag] =
-    nil
-when "linux"
-  BUILD[:pkgconfig_dir] =
-    File.join(BUILD[:libdir], "pkgconfig")
-
-  BUILD[:intl_cflag] =
-    nil
-
-  BUILD[:intl_ldflag] =
-    nil
-
-  BUILD[:dl_ldflag] =
-    "-ldl"
-when "darwin"
-  BUILD[:pkgconfig_dir] =
-    File.join(BUILD[:libdir], "pkgconfig")
-
-  BUILD[:intl_cflag] =
-    "-I#{File.join(BUILD[:prefix], "include")}"
-
-  BUILD[:intl_ldflag] =
-    "-L#{BUILD[:libdir]} -lintl"
-
-  BUILD[:dl_ldflag] =
-    nil
-when "windows", "android"
-  BUILD[:pkgconfig_dir] =
-    File.join(BUILD[:libdir], "pkgconfig")
-
-  BUILD[:intl_cflag] =
-    nil
-
-  BUILD[:intl_ldflag] =
-    nil
-
-  BUILD[:dl_ldflag] =
-    nil
-end
+BUILD[:dl_ldflag] =
+  TARGET_OS == "linux" ? "-ldl" : nil
 
 BUILD[:cflags] =
   %w[
@@ -372,8 +319,6 @@ BUILD[:cflags] =
     -fPIC
     -std=c23
   ]
-
-BUILD[:ldflags] = []
 
 if NATIVE_TARGET && pkg_config_exists?("gtk+-3.0")
   BUILD[:gtk3_cflags] =
@@ -429,24 +374,12 @@ else
 end
 
 if NATIVE_TARGET &&
-   pkg_config_exists?("Qt6Core",
-                      "Qt6Gui",
-                      "Qt6Widgets",
-                      "gobject-2.0",
-                      "gio-2.0")
+   pkg_config_exists?("Qt6Core", "Qt6Gui", "Qt6Widgets")
   BUILD[:qt6_cflags] =
-    pkg_config_cflags("Qt6Core",
-                      "Qt6Gui",
-                      "Qt6Widgets",
-                      "gobject-2.0",
-                      "gio-2.0")
+    pkg_config_cflags("Qt6Core", "Qt6Gui", "Qt6Widgets")
 
   BUILD[:qt6_libs] =
-    pkg_config_libs("Qt6Core",
-                    "Qt6Gui",
-                    "Qt6Widgets",
-                    "gobject-2.0",
-                    "gio-2.0")
+    pkg_config_libs("Qt6Core", "Qt6Gui", "Qt6Widgets")
 
   BUILD[:qt6_moc] =
     ENV["MOC_QT6"] ||
@@ -456,24 +389,6 @@ if NATIVE_TARGET &&
       "/usr/lib64/qt6/libexec/moc",     # openSUSE Tumbleweed
       "/usr/lib/qt6/libexec/moc"        # Debian Bookworm
     )
-
-  # Qt6 regular include path notes, preserved from configure:
-  #   /usr/include/qt6
-  #   /usr/local/include/qt6
-  #   /usr/include/x86_64-linux-gnu/qt6       # Debian Bookworm
-  #
-  # Qt6Core regular include path notes:
-  #   /usr/include/qt6/QtCore
-  #   /usr/local/include/qt6/QtCore
-  #   /usr/include/x86_64-linux-gnu/qt6/QtCore
-  #
-  # Qt6Gui regular include path notes:
-  #   /usr/include/qt6/QtGui
-  #   /usr/local/include/qt6/QtGui
-  #   /usr/include/x86_64-linux-gnu/qt6/QtGui
-  #
-  # Regular Qt6 include flags are normally supplied by pkg-config.
-  # The input context bridge also requires Qt private headers below.
 
   BUILD[:qt6_core_private_include_path] =
     ENV["QT6_CORE_PRIVATE_INCLUDE_PATH"] ||
@@ -490,27 +405,6 @@ if NATIVE_TARGET &&
       "/usr/include/x86_64-linux-gnu/qt6/QtGui/6.*.*", # Debian Bookworm
       "/usr/local/include/qt6/QtGui/6.*.*"             # FreeBSD
     )
-
-  # Qt6 library path notes, preserved from configure.
-  # These are normally supplied by pkg-config in this Rakefile.
-  #
-  # Qt6Core:
-  #   /usr/lib/libQt6Core.so.6
-  #   /usr/local/lib/qt6/libQt6Core.so.6
-  #   /usr/lib64/libQt6Core.so.6                 # openSUSE Tumbleweed
-  #   /usr/lib/x86_64-linux-gnu/libQt6Core.so.6
-  #
-  # Qt6Gui:
-  #   /usr/lib/libQt6Gui.so.6
-  #   /usr/local/lib/qt6/libQt6Gui.so.6
-  #   /usr/lib64/libQt6Gui.so.6                  # openSUSE Tumbleweed
-  #   /usr/lib/x86_64-linux-gnu/libQt6Gui.so.6   # Debian Bookworm
-  #
-  # Qt6Widgets:
-  #   /usr/lib/libQt6Widgets.so.6
-  #   /usr/local/lib/qt6/libQt6Widgets.so.6
-  #   /usr/lib64/libQt6Widgets.so.6              # openSUSE Tumbleweed
-  #   /usr/lib/x86_64-linux-gnu/libQt6Widgets.so.6 # Debian Bookworm
 
   BUILD[:qt6_im_moduledir] =
     ENV["QT6_IM_MODULE_DIR"] ||
@@ -532,27 +426,40 @@ else
 end
 
 # Bypasses Rake's default task resolution for undefined arguments,
-# enabling custom CLI parameter passing (e.g., `rake plat src`).
+# enabling positional library types (e.g., `rake test relocatable`).
 ARGV.drop(1).each do |arg|
   task arg.to_sym do; end unless Rake::Task.task_defined?(arg)
 end
 
-# [포지셔널 인자 스캔] 커맨드라인 인자 중 라이브러리 타입을 판별하여 추출합니다.
-lib_type = "static-pic"
-if ARGV.include?("relocatable")
-  lib_type = "relocatable"
-elsif ARGV.include?("static")
-  lib_type = "static"
+SUPPORTED_LIBRARY_TYPES = %w[static-pic relocatable].freeze
+
+# Resolve an optional positional library type such as `rake test relocatable`.
+positional_lib_types =
+  ARGV & (SUPPORTED_LIBRARY_TYPES + ["static"])
+
+if positional_lib_types.include?("static")
+  fail_config "non-PIC static builds are unsupported; use static-pic"
 end
 
+if positional_lib_types.length > 1
+  fail_config "multiple positional library types were specified"
+end
+
+positional_lib_type = positional_lib_types.first
 env_lib_type = env_choice("CIM_LIBRARY_TYPE", "LIBRARY_TYPE")
-if env_lib_type && env_lib_type != lib_type && lib_type != "static-pic"
+
+if env_lib_type == "static"
+  fail_config "non-PIC static builds are unsupported; use static-pic"
+end
+
+if env_lib_type && positional_lib_type &&
+   env_lib_type != positional_lib_type
   fail_config "CIM_LIBRARY_TYPE/LIBRARY_TYPE and positional library type disagree"
 end
 
-LIB_TYPE = env_lib_type || lib_type
+LIB_TYPE = env_lib_type || positional_lib_type || "static-pic"
 fail_config "unsupported library type: #{LIB_TYPE}" \
-  unless %w[static static-pic relocatable].include?(LIB_TYPE)
+  unless SUPPORTED_LIBRARY_TYPES.include?(LIB_TYPE)
 
 RAKE     = BUILD[:rake]
 CC       = BUILD[:cc]
@@ -561,17 +468,30 @@ GPRBUILD = BUILD[:gprbuild]
 GPRCLEAN = BUILD[:gprclean]
 
 BUILD_ROOT = "build"
-OBJ_DIR = File.join(BUILD_ROOT, "obj", TARGET, BUILD_PROFILE)
+OBJ_PROFILE_DIR =
+  File.join(BUILD_ROOT, "obj", TARGET, BUILD_PROFILE)
+OBJ_DIR = File.join(OBJ_PROFILE_DIR, LIB_TYPE)
 LIB_DIR = File.join(BUILD_ROOT, "lib", TARGET, BUILD_PROFILE)
 BIN_DIR = File.join(BUILD_ROOT, "bin", TARGET, BUILD_PROFILE)
 
 LIBCIM_FILE =
   File.join(LIB_DIR, LIB_TYPE == "relocatable" ? "libcim.so" : "libcim.a")
+CIM_LINK_LIBS =
+  LIB_TYPE == "relocatable" ? ["-L#{LIB_DIR}", "-lcim"] : [LIBCIM_FILE]
 
 CLAIR_DIR = File.expand_path("../ada-clair", SRC_TOP)
+CLAIR_INCLUDE_DIR = File.join(CLAIR_DIR, "include")
+CLAIR_HEADER = File.join(CLAIR_INCLUDE_DIR, "clair.h")
 CLAIR_LIB_DIR = File.join(CLAIR_DIR, "build", "lib", TARGET, BUILD_PROFILE)
-CLAIR_LIB_FILE = File.join(CLAIR_LIB_DIR, "libclair.a")
-CLAIR_LINK_LIBS = LIB_TYPE == "relocatable" ? [] : [CLAIR_LIB_FILE]
+CLAIR_LIB_FILE =
+  File.join(
+    CLAIR_LIB_DIR,
+    LIB_TYPE == "relocatable" ? "libclair.so" : "libclair.a"
+  )
+CLAIR_LINK_LIBS =
+  LIB_TYPE == "relocatable" ?
+    ["-L#{CLAIR_LIB_DIR}", "-lclair"] :
+    [CLAIR_LIB_FILE]
 CLAIR_GEN_DIR = File.join(CLAIR_DIR, "build", "gen", TARGET)
 CLAIR_PROBE_FILES = %w[
   .probe-stamp
@@ -581,21 +501,71 @@ CLAIR_PROBE_FILES = %w[
 
 # gnatls -v 명령의 결과에서 실제 에이다 오브젝트 표준 경로(adalib)를 정밀하게 파싱합니다.
 GNAT_LIB_DIR = `gnatls -v`.lines.find { |line| line.include?("adalib") }&.strip || ""
+# libgnarl depends on symbols provided by libgnat, so keep libgnat last for
+# left-to-right static archive resolution.
 ADA_STATIC_LIBS = [
-  File.join(GNAT_LIB_DIR, "libgnat.a"),
-  File.join(GNAT_LIB_DIR, "libgnarl.a")
+  File.join(GNAT_LIB_DIR, "libgnarl_pic.a"),
+  File.join(GNAT_LIB_DIR, "libgnat_pic.a")
 ]
 
-# 동적(.so) 빌드 시에는 에이다 런타임이 내부 포함되므로 테스트 빌드 시 중복 링크를 제외합니다.
+# 동적(.so) 모듈에 넣을 수 있도록 PIC 에이다 런타임을 사용합니다.
 ADA_LIBS = (LIB_TYPE == "relocatable" ? [] : ADA_STATIC_LIBS)
+
+CLAIR_SYSTEM_LIBS =
+  case TARGET_OS
+  when "freebsd"
+    %w[-L/usr/local/lib -lintl -lpthread -lpcre2-8 -lyaml]
+  when "darwin"
+    %w[-lpcre2-8 -lyaml]
+  when "linux"
+    %w[-ldl -lpcre2-8 -lyaml]
+  when "windows"
+    dependency_root =
+      File.join(CLAIR_DIR, "build", "deps", TARGET, BUILD_PROFILE)
+    libyaml_prefix =
+      ENV["CLAIR_LIBYAML_PREFIX"] ||
+      File.join(dependency_root, "libyaml")
+    pcre2_prefix =
+      ENV["CLAIR_PCRE2_PREFIX"] ||
+      File.join(dependency_root, "pcre2")
+    [
+      "-L#{pcre2_prefix}/lib",
+      "-L#{libyaml_prefix}/lib",
+      "-lpcre2-8",
+      "-lyaml"
+    ]
+  when "android"
+    %w[-ldl -lyaml]
+  end
+
+CLAIR_LINK_CLOSURE =
+  LIB_TYPE == "relocatable" ?
+    CLAIR_LINK_LIBS :
+    CLAIR_LINK_LIBS + ADA_LIBS + CLAIR_SYSTEM_LIBS
+
+SAMPLE_THREAD_LIBS =
+  TARGET_OS == "freebsd" ? %w[-lstdthreads -lpthread] : %w[-lpthread]
+
+DYNAMIC_LOADER_LIBS = [BUILD[:dl_ldflag]].compact.freeze
+
+NESTED_HOST_TEST_ENABLED =
+  LIB_TYPE == "static-pic" && %w[freebsd linux].include?(TARGET_OS)
+
+PLUGIN_REENTRY_TEST_ENABLED =
+  %w[freebsd linux].include?(TARGET_OS)
 
 TEST_CFLAGS = %w[
   -Wall
   -Wextra
   -Werror
   -std=c23
+  -D_POSIX_C_SOURCE=200809L
   -Iinclude
-]
+] +
+  (LIB_TYPE == "relocatable" ? [] :
+    %w[-DCIM_HAS_INTERNAL_TEST_HOOK=1]) +
+  (PLUGIN_REENTRY_TEST_ENABLED ?
+    %w[-DCIM_HAS_PLUGIN_REENTRY_TEST=1] : [])
 
 SAMPLE_CFLAGS = %w[
   -Wall
@@ -615,14 +585,17 @@ SAMPLE_CFLAGS = %w[
 ]
 
 SAMPLE_LIBHANGUL_CFLAGS =
-  ENV["LIBHANGUL_CFLAGS"]&.split ||
-  (NATIVE_TARGET ? `pkg-config --cflags libhangul 2>/dev/null`.split : [])
+  external_header_cflags(
+    ENV["LIBHANGUL_CFLAGS"]&.split ||
+    (NATIVE_TARGET ? `pkg-config --cflags libhangul 2>/dev/null`.split : [])
+  )
 
 SAMPLE_LIBHANGUL_LIBS =
   ENV["LIBHANGUL_LIBS"]&.split ||
   (NATIVE_TARGET ? `pkg-config --libs libhangul 2>/dev/null`.split : [])
 
 TEST_PLUGIN_SOURCES = {
+  "bridge-callback" => "tests/plugins/im-bridge-callback.c",
   "dummy"       => "tests/plugins/im-dummy.c",
   "init-fail"   => "tests/plugins/im-init-fail.c",
   "create-fail" => "tests/plugins/im-create-fail.c",
@@ -630,8 +603,16 @@ TEST_PLUGIN_SOURCES = {
   "no-symbol"   => "tests/plugins/im-no-symbol.c",
   "no-create"    => "tests/plugins/im-no-create.c",
   "no-destroy"   => "tests/plugins/im-no-destroy.c",
-  "noop-destroy" => "tests/plugins/im-noop-destroy.c"
+  "noop-destroy" => "tests/plugins/im-noop-destroy.c",
+  "nested-counter" => "tests/plugins/im-nested-counter.c"
 }
+
+if PLUGIN_REENTRY_TEST_ENABLED
+  TEST_PLUGIN_SOURCES["reentrant-init"] =
+    "tests/plugins/im-reentrant-init.c"
+  TEST_PLUGIN_SOURCES["reentrant-fini"] =
+    "tests/plugins/im-reentrant-fini.c"
+end
 
 TEST_PLUGIN_TARGETS =
   TEST_PLUGIN_SOURCES.keys.map do |name|
@@ -642,27 +623,31 @@ def gpr_target_args
   GPR_TARGET.to_s.empty? ? [] : ["--target=#{GPR_TARGET}"]
 end
 
-def gpr_external_args
+def gpr_external_args(library_type = LIB_TYPE)
   [
     "-XCIM_TARGET=#{TARGET}",
     "-XCIM_TARGET_OS=#{TARGET_OS}",
     "-XCIM_BUILD_PROFILE=#{BUILD_PROFILE}",
-    "-XCIM_LIBRARY_TYPE=#{LIB_TYPE}",
+    "-XCIM_LIBRARY_TYPE=#{library_type}",
     "-XCLAIR_TARGET=#{TARGET}",
     "-XCLAIR_TARGET_OS=#{TARGET_OS}",
-    "-XCLAIR_BUILD_PROFILE=#{BUILD_PROFILE}"
+    "-XCLAIR_BUILD_PROFILE=#{BUILD_PROFILE}",
+    "-XCLAIR_LIBRARY_TYPE=#{library_type}"
   ]
 end
 
-def gprbuild_project(project)
-  mkdir_p [OBJ_DIR, LIB_DIR, BIN_DIR]
-  sh_cmd(*(command_words(GPRBUILD) + gpr_target_args + gpr_external_args +
+def gprbuild_project(project, library_type = LIB_TYPE)
+  object_dir = File.join(OBJ_PROFILE_DIR, library_type)
+  mkdir_p [object_dir, LIB_DIR, BIN_DIR]
+  sh_cmd(*(command_words(GPRBUILD) + gpr_target_args +
+           gpr_external_args(library_type) +
            ["-P", project]))
 end
 
 def gprclean_project(project)
   return unless command_available?(command_words(GPRCLEAN).first)
   return unless NATIVE_TARGET
+  return unless File.directory?(OBJ_DIR)
 
   sh_cmd(*(command_words(GPRCLEAN) + gpr_target_args + gpr_external_args +
            ["-r", "-P", project]))
@@ -699,8 +684,33 @@ def lib_rpath_flag
   "-Wl,-rpath,#{File.expand_path(LIB_DIR)}"
 end
 
+def clair_rpath_flags
+  return [] unless LIB_TYPE == "relocatable"
+
+  ["-Wl,-rpath,#{File.expand_path(CLAIR_LIB_DIR)}"]
+end
+
+def embedded_archive_link_flags
+  return [] if LIB_TYPE == "relocatable"
+
+  case TARGET_OS
+  when "linux", "freebsd", "android"
+    %w[-Wl,--exclude-libs,ALL]
+  else
+    []
+  end
+end
+
+def test_export_dynamic_flags
+  return [] unless PLUGIN_REENTRY_TEST_ENABLED
+
+  %w[-Wl,--export-dynamic]
+end
+
 GTK3_IM_OBJ = File.join(OBJ_DIR, "im-cim-gtk3.o")
 GTK3_CANDIDATE_OBJ = File.join(OBJ_DIR, "c-candidate.o")
+GTK3_CANDIDATE_DATA_OBJ = File.join(OBJ_DIR, "c-candidate-data.o")
+GTK3_PREEDIT_OBJ = File.join(OBJ_DIR, "c-preedit.o")
 GTK3_MODULE = File.join(LIB_DIR, "im-cim-gtk3.so")
 
 QT6_MOC = File.join(OBJ_DIR, "im-cim-qt.moc")
@@ -714,6 +724,24 @@ CIM_ADA_TEST_EXE = File.join(BIN_DIR, "cim-unit-tests")
 
 TEST_CIM_EXE = File.join(BIN_DIR, "test-cim")
 TEST_LIBHANGUL_EXE = File.join(BIN_DIR, "test-im-libhangul")
+TEST_GTK_PREEDIT_EXE = File.join(BIN_DIR, "test-gtk-preedit")
+TEST_GTK_CANDIDATE_EXE = File.join(BIN_DIR, "test-gtk-candidate")
+TEST_GTK_CALLBACK_EXE = File.join(BIN_DIR, "test-gtk-callback-delivery")
+TEST_QT6_CALLBACK_EXE = File.join(BIN_DIR, "test-qt6-callback-delivery")
+
+NESTED_INNER_PLUGIN =
+  File.join(LIB_DIR, "libim-nested-counter.so")
+NESTED_SHARED_CIM = File.join(LIB_DIR, "libcim.so")
+NESTED_SHARED_CLAIR =
+  File.join(CLAIR_LIB_DIR, "libclair.so")
+NESTED_OUTER_SOURCE = "tests/outer-plugins/outer-cim-host.c"
+NESTED_OUTER_MODULES = {
+  File.join(LIB_DIR, "outer-cim-a.so") =>
+    ["outer_cim_a_open", "outer_cim_a_close"],
+  File.join(LIB_DIR, "outer-cim-b.so") =>
+    ["outer_cim_b_open", "outer_cim_b_close"]
+}.freeze
+TEST_NESTED_HOST_EXE = File.join(BIN_DIR, "test-nested-host")
 
 desc "Print the resolved Cim build context"
 task :info do
@@ -754,10 +782,9 @@ task :help do
 
     [2] Library Type Options (Positional Arguments):
       static-pic           : (Default) Build position-independent static archive (.a)
-                             * For embedding directly into libnimf.so
+                             * For embedding into shared modules
       relocatable          : Build standalone shared library (.so)
                              * Uses encapsulated SAL runtime
-      static               : Build standard static archive (.a)
 
     [3] Real-world Examples:
       rake info TARGET=x86_64-unknown-freebsd
@@ -771,7 +798,7 @@ task :help do
       CIM_TARGET           : Canonical toolchain target triple
       CIM_TARGET_OS        : freebsd, linux, darwin, windows, android
       CIM_BUILD_PROFILE    : debug or release
-      CIM_LIBRARY_TYPE     : static, static-pic, relocatable
+      CIM_LIBRARY_TYPE     : static-pic or relocatable
 
       Linux libc variants are separate ABI targets. For example,
       x86_64-linux-gnu and x86_64-linux-musl are not native-compatible
@@ -791,9 +818,25 @@ task :build do
   end
 end
 
+task :clair do
+  sh(
+    { "CLAIR_LIBRARY_TYPE" => LIB_TYPE },
+    *command_words(RAKE),
+    "-C",
+    CLAIR_DIR,
+    "build",
+    "TARGET=#{TARGET}",
+    "BUILD=#{BUILD_PROFILE}"
+  )
+end
+
 desc "Build libcim (Ada Core + C Wrapper)"
 file LIBCIM_FILE => [
+  :clair,
   "cim.gpr",
+  "cim_objects.gpr",
+  "cim-elf.map",
+  "src/cim-c-api.c",
   "src/cim-internal.c",
   "src/cim.ads",
   "src/cim.adb",
@@ -817,6 +860,7 @@ desc "Build libcim (Ada Core + C Wrapper)"
 task :cim => [LIBCIM_FILE]
 
 TEST_PLUGIN_SOURCES.each do |name, source|
+  plugin_cflags = name == "bridge-callback" ? %w[-pthread] : []
   soname =
     File.join(LIB_DIR, "libim-#{name}.so")
 
@@ -832,6 +876,7 @@ TEST_PLUGIN_SOURCES.each do |name, source|
 
     sh_cmd(*([CC] +
              BUILD[:cflags] +
+             plugin_cflags +
              [
                "-Iinclude",
                "-shared",
@@ -853,15 +898,84 @@ desc "Build test plugins"
 task :"test-plugins" => TEST_PLUGIN_TARGETS
 task :plugins => :"test-plugins"
 
+task :nested_shared_cim => [LIBCIM_FILE] do
+  unless NESTED_HOST_TEST_ENABLED
+    abort "nested shared Cim fixture requires static-pic ELF embedding"
+  end
+
+  ensure_native_task("nested shared Cim fixture build")
+
+  sh(
+    {
+      "CLAIR_LIBRARY_TYPE" => "relocatable"
+    },
+    *command_words(RAKE),
+    "-C",
+    CLAIR_DIR,
+    "build",
+    "TARGET=#{TARGET}",
+    "BUILD=#{BUILD_PROFILE}"
+  )
+
+  gprbuild_project("cim.gpr", "relocatable")
+
+  abort "Expected nested shared Cim not found: #{NESTED_SHARED_CIM}" unless
+    File.exist?(NESTED_SHARED_CIM)
+  abort "Expected nested shared Clair not found: #{NESTED_SHARED_CLAIR}" unless
+    File.exist?(NESTED_SHARED_CLAIR)
+end
+
+NESTED_OUTER_MODULES.each do |module_path, symbols|
+  open_symbol, close_symbol = symbols
+
+  file module_path => [
+    LIBCIM_FILE,
+    NESTED_OUTER_SOURCE,
+    "include/cim.h"
+  ] do
+    unless NESTED_HOST_TEST_ENABLED
+      abort "nested host tests require static ELF embedding"
+    end
+
+    ensure_native_task("nested host module build")
+    mkdir_p LIB_DIR
+
+    sh_cmd(*([CC] +
+             BUILD[:cflags] +
+             [
+               "-fvisibility=hidden",
+               "-Iinclude",
+               "-DCIM_OUTER_OPEN=#{open_symbol}",
+               "-DCIM_OUTER_CLOSE=#{close_symbol}",
+               "-shared",
+               NESTED_OUTER_SOURCE
+             ] +
+             embedded_archive_link_flags +
+             CIM_LINK_LIBS +
+             CLAIR_LINK_CLOSURE +
+             [
+               "-lpthread",
+               "-o",
+               module_path
+             ]))
+  end
+end
+
 desc "Build sample modules"
 task :samples => [:sample_libhangul]
 
+bridge_tasks = []
+bridge_tasks << :gtk3 if BUILD[:gtk3_enabled]
+bridge_tasks << :qt6 if BUILD[:qt6_enabled]
+
 desc "Build bridge modules"
-task :bridges => [:gtk3, :qt6]
+task :bridges => bridge_tasks
 
 file GTK3_IM_OBJ => [
   "modules/bridges/gtk3/im-cim-gtk.c",
   "modules/bridges/gtk3/c-candidate.h",
+  "modules/bridges/gtk3/c-candidate-data.h",
+  "modules/bridges/gtk3/c-preedit.h",
   "include/cim.h"
 ] do
   unless BUILD[:gtk3_enabled]
@@ -874,8 +988,8 @@ file GTK3_IM_OBJ => [
     BUILD[:cflags] +
     BUILD[:gtk3_cflags] +
     [
+      "-fvisibility=hidden",
       "-Iinclude",
-      "-DGETTEXT_PACKAGE=#{BUILD[:gettext_package].dump}",
       "-DCIM_LOCALE_DIR=#{BUILD[:locale_dir].dump}"
     ]
 
@@ -892,6 +1006,7 @@ end
 file GTK3_CANDIDATE_OBJ => [
   "modules/bridges/gtk3/c-candidate.c",
   "modules/bridges/gtk3/c-candidate.h",
+  "modules/bridges/gtk3/c-candidate-data.h",
   "include/cim.h"
 ] do
   mkdir_p OBJ_DIR
@@ -900,8 +1015,8 @@ file GTK3_CANDIDATE_OBJ => [
     BUILD[:cflags] +
     BUILD[:gtk3_cflags] +
     [
+      "-fvisibility=hidden",
       "-Iinclude",
-      "-DGETTEXT_PACKAGE=#{BUILD[:gettext_package].dump}",
       "-DCIM_LOCALE_DIR=#{BUILD[:locale_dir].dump}"
     ]
 
@@ -915,20 +1030,73 @@ file GTK3_CANDIDATE_OBJ => [
              ]))
 end
 
+file GTK3_CANDIDATE_DATA_OBJ => [
+  "modules/bridges/gtk3/c-candidate-data.c",
+  "modules/bridges/gtk3/c-candidate-data.h",
+  "include/cim.h"
+] do
+  mkdir_p OBJ_DIR
+
+  gtk3_cflags =
+    BUILD[:cflags] +
+    BUILD[:gtk3_cflags] +
+    [
+      "-fvisibility=hidden",
+      "-Iinclude",
+      "-DCIM_LOCALE_DIR=#{BUILD[:locale_dir].dump}"
+    ]
+
+  sh_cmd(*([CC] +
+           gtk3_cflags +
+             [
+               "-c",
+               "modules/bridges/gtk3/c-candidate-data.c",
+               "-o",
+               GTK3_CANDIDATE_DATA_OBJ
+             ]))
+end
+
+file GTK3_PREEDIT_OBJ => [
+  "modules/bridges/gtk3/c-preedit.c",
+  "modules/bridges/gtk3/c-preedit.h",
+  "include/cim.h"
+] do
+  mkdir_p OBJ_DIR
+
+  gtk3_cflags =
+    BUILD[:cflags] +
+    BUILD[:gtk3_cflags] +
+    [
+      "-fvisibility=hidden",
+      "-Iinclude",
+      "-DCIM_LOCALE_DIR=#{BUILD[:locale_dir].dump}"
+    ]
+
+  sh_cmd(*([CC] +
+           gtk3_cflags +
+             [
+               "-c",
+               "modules/bridges/gtk3/c-preedit.c",
+               "-o",
+               GTK3_PREEDIT_OBJ
+             ]))
+end
+
 file GTK3_MODULE => [
   LIBCIM_FILE,
   GTK3_IM_OBJ,
-  GTK3_CANDIDATE_OBJ
+  GTK3_CANDIDATE_OBJ,
+  GTK3_CANDIDATE_DATA_OBJ,
+  GTK3_PREEDIT_OBJ
 ] do
   mkdir_p LIB_DIR
 
   gtk3_libs =
     BUILD[:gtk3_libs] +
-    [
-      "-L#{LIB_DIR}",
-      "-lcim"
-    ] +
-    CLAIR_LINK_LIBS +
+    embedded_archive_link_flags +
+    CIM_LINK_LIBS +
+    CLAIR_LINK_CLOSURE +
+    clair_rpath_flags +
     [
       "-Wl,-rpath,$ORIGIN"
     ]
@@ -937,7 +1105,9 @@ file GTK3_MODULE => [
            %w[-shared -fPIC] +
            [
              GTK3_IM_OBJ,
-             GTK3_CANDIDATE_OBJ
+             GTK3_CANDIDATE_OBJ,
+             GTK3_CANDIDATE_DATA_OBJ,
+             GTK3_PREEDIT_OBJ
            ] +
            gtk3_libs +
            [
@@ -952,7 +1122,8 @@ desc "Build modules/bridges/gtk3"
 task :gtk3 => [GTK3_MODULE]
 
 file QT6_MOC => [
-  "modules/bridges/qt6/im-cim-qt.cpp"
+  "modules/bridges/qt6/im-cim-qt.cpp",
+  CLAIR_HEADER
 ] do
   unless BUILD[:qt6_enabled]
     abort "Qt6 bridge cannot be built: Qt6Core, Qt6Gui, Qt6Widgets, or moc not found"
@@ -961,6 +1132,10 @@ file QT6_MOC => [
   mkdir_p OBJ_DIR
 
   sh_cmd(BUILD[:qt6_moc],
+         "-I",
+         CLAIR_INCLUDE_DIR,
+         "-I",
+         CLAIR_GEN_DIR,
          "-I",
          BUILD[:qt6_core_private_include_path],
          "-I",
@@ -974,7 +1149,8 @@ file QT6_OBJ => [
   "modules/bridges/qt6/im-cim-qt.cpp",
   "modules/bridges/qt6/cim.json",
   QT6_MOC,
-  "include/cim.h"
+  "include/cim.h",
+  CLAIR_HEADER
 ] do
   mkdir_p OBJ_DIR
 
@@ -982,10 +1158,13 @@ file QT6_OBJ => [
     BUILD[:qt6_cflags] +
     [
       "-Iinclude",
+      "-I#{CLAIR_INCLUDE_DIR}",
+      "-I#{CLAIR_GEN_DIR}",
       "-I#{OBJ_DIR}",
       "-I#{BUILD[:qt6_core_private_include_path]}",
       "-I#{BUILD[:qt6_gui_private_include_path]}",
       "-DQT_NO_KEYWORDS",
+      "-fvisibility=hidden",
       "-std=c++17"
     ]
 
@@ -1008,11 +1187,10 @@ file QT6_MODULE => [
 
   qt6_libs =
     BUILD[:qt6_libs] +
-    [
-      "-L#{LIB_DIR}",
-      "-lcim"
-    ] +
-    CLAIR_LINK_LIBS +
+    embedded_archive_link_flags +
+    CIM_LINK_LIBS +
+    CLAIR_LINK_CLOSURE +
+    clair_rpath_flags +
     [
       "-Wl,-rpath,$ORIGIN"
     ]
@@ -1036,19 +1214,30 @@ task :qt6 => [QT6_MODULE]
 
 desc "Build modules/samples/im-libhangul"
 file SAMPLE_LIBHANGUL_MODULE => [
-  LIBCIM_FILE,
+  :clair,
   "modules/samples/im-libhangul/im-libhangul.c",
-  "include/cim.h"
+  "include/cim.h",
+  CLAIR_HEADER
 ] do
   ensure_native_task("sample module build")
   mkdir_p LIB_DIR
   sh_cmd(*([CC] +
           SAMPLE_CFLAGS +
+          [
+            "-I#{CLAIR_INCLUDE_DIR}",
+            "-I#{CLAIR_GEN_DIR}"
+          ] +
           SAMPLE_LIBHANGUL_CFLAGS +
           ["modules/samples/im-libhangul/im-libhangul.c"] +
           %w[-shared] +
           SAMPLE_LIBHANGUL_LIBS +
-          ["-lpthread", "-lstdthreads", "-o", SAMPLE_LIBHANGUL_MODULE]))
+          embedded_archive_link_flags +
+          CLAIR_LINK_CLOSURE +
+          SAMPLE_THREAD_LIBS +
+          clair_rpath_flags +
+          [
+            "-o", SAMPLE_LIBHANGUL_MODULE
+          ]))
 end
 
 desc "Build modules/samples/im-libhangul"
@@ -1058,6 +1247,8 @@ file CIM_ADA_TEST_EXE => [
   LIBCIM_FILE,
   CIM_ADA_TEST_PROJECT,
   "tests/ada/cim_unit_tests.adb",
+  "tests/ada/cim_process_tests.ads",
+  "tests/ada/cim_process_tests.adb",
   "tests/ada/cim_runtime_tests.ads",
   "tests/ada/cim_runtime_tests.adb",
   "tests/ada/cim_tests.ads",
@@ -1083,11 +1274,12 @@ file TEST_CIM_EXE => [
            TEST_CFLAGS +
            [
              "tests/test-common.c",
-             "tests/test-cim.c",
-             "-L#{LIB_DIR}",
-             "-lcim"
-            ] + CLAIR_LINK_LIBS + ADA_LIBS + [
-             "-ldl",
+             "tests/test-cim.c"
+           ] +
+           test_export_dynamic_flags +
+           CIM_LINK_LIBS +
+           CLAIR_LINK_CLOSURE +
+           clair_rpath_flags + [
              "-lpthread",
              lib_rpath_flag,
              "-o",
@@ -1098,6 +1290,7 @@ end
 file TEST_LIBHANGUL_EXE => [
   LIBCIM_FILE,
   SAMPLE_LIBHANGUL_MODULE,
+  CLAIR_HEADER,
   "tests/test-common.c",
   "tests/test-common.h",
   "tests/test-im-libhangul.c",
@@ -1109,12 +1302,11 @@ file TEST_LIBHANGUL_EXE => [
   sh_cmd(*([CC] +
            TEST_CFLAGS +
            [
+             "-I#{CLAIR_INCLUDE_DIR}",
+             "-I#{CLAIR_GEN_DIR}",
              "tests/test-common.c",
-             "tests/test-im-libhangul.c",
-             "-L#{LIB_DIR}",
-             "-lcim"
-            ] + CLAIR_LINK_LIBS + ADA_LIBS + [
-             "-ldl",
+             "tests/test-im-libhangul.c"
+            ] + CIM_LINK_LIBS + CLAIR_LINK_CLOSURE + clair_rpath_flags + [
              "-lpthread",
              lib_rpath_flag,
              "-o",
@@ -1122,12 +1314,200 @@ file TEST_LIBHANGUL_EXE => [
            ]))
 end
 
-desc "Build test executables"
-task :tests => [
+file TEST_GTK_PREEDIT_EXE => [
+  GTK3_PREEDIT_OBJ,
+  "tests/test-gtk-preedit.c",
+  "modules/bridges/gtk3/c-preedit.h",
+  "include/cim.h"
+] do
+  unless BUILD[:gtk3_enabled]
+    abort "GTK3 preedit test cannot be built: GTK3 bridge is disabled"
+  end
+
+  ensure_native_task("GTK3 preedit test executable build")
+  mkdir_p BIN_DIR
+
+  gtk3_test_cflags =
+    TEST_CFLAGS +
+    external_header_cflags(BUILD[:gtk3_cflags]) +
+    ["-Imodules/bridges/gtk3"]
+
+  sh_cmd(*([CC] +
+           gtk3_test_cflags +
+           [
+             "tests/test-gtk-preedit.c",
+             GTK3_PREEDIT_OBJ
+           ] +
+           BUILD[:gtk3_libs] +
+           [
+             "-o",
+             TEST_GTK_PREEDIT_EXE
+           ]))
+end
+
+file TEST_GTK_CANDIDATE_EXE => [
+  GTK3_CANDIDATE_DATA_OBJ,
+  "tests/test-gtk-candidate.c",
+  "modules/bridges/gtk3/c-candidate-data.h",
+  "include/cim.h"
+] do
+  unless BUILD[:gtk3_enabled]
+    abort "GTK3 candidate test cannot be built: GTK3 bridge is disabled"
+  end
+
+  ensure_native_task("GTK3 candidate test executable build")
+  mkdir_p BIN_DIR
+
+  gtk3_test_cflags =
+    TEST_CFLAGS +
+    external_header_cflags(BUILD[:gtk3_cflags]) +
+    ["-Imodules/bridges/gtk3"]
+
+  sh_cmd(*([CC] +
+           gtk3_test_cflags +
+           [
+             "tests/test-gtk-candidate.c",
+             GTK3_CANDIDATE_DATA_OBJ
+           ] +
+           BUILD[:gtk3_libs] +
+           [
+             "-o",
+             TEST_GTK_CANDIDATE_EXE
+           ]))
+end
+
+file TEST_GTK_CALLBACK_EXE => [
+  LIBCIM_FILE,
+  GTK3_CANDIDATE_OBJ,
+  GTK3_CANDIDATE_DATA_OBJ,
+  GTK3_PREEDIT_OBJ,
+  "tests/test-gtk-callback-delivery.c",
+  "modules/bridges/gtk3/im-cim-gtk.c",
+  "include/cim.h"
+] do
+  unless BUILD[:gtk3_enabled]
+    abort "GTK3 callback test cannot be built: GTK3 bridge is disabled"
+  end
+
+  ensure_native_task("GTK3 callback test executable build")
+  mkdir_p BIN_DIR
+
+  gtk3_test_cflags =
+    TEST_CFLAGS +
+    external_header_cflags(BUILD[:gtk3_cflags]) +
+    [
+      "-DCIM_BRIDGE_TEST=1",
+      "-DCIM_LOCALE_DIR=#{BUILD[:locale_dir].dump}"
+    ]
+
+  sh_cmd(*([CC] +
+           gtk3_test_cflags +
+           [
+             "tests/test-gtk-callback-delivery.c",
+             "modules/bridges/gtk3/im-cim-gtk.c",
+             GTK3_CANDIDATE_OBJ,
+             GTK3_CANDIDATE_DATA_OBJ,
+             GTK3_PREEDIT_OBJ
+           ] +
+           BUILD[:gtk3_libs] +
+           embedded_archive_link_flags +
+           CIM_LINK_LIBS +
+           CLAIR_LINK_CLOSURE +
+           clair_rpath_flags +
+           [
+             "-lpthread",
+             lib_rpath_flag,
+             "-o",
+             TEST_GTK_CALLBACK_EXE
+           ]))
+end
+
+file TEST_QT6_CALLBACK_EXE => [
+  LIBCIM_FILE,
+  QT6_MOC,
+  "tests/test-qt6-callback-delivery.cpp",
+  "modules/bridges/qt6/im-cim-qt.cpp",
+  "include/cim.h",
+  CLAIR_HEADER
+] do
+  unless BUILD[:qt6_enabled]
+    abort "Qt6 callback test cannot be built: Qt6 bridge is disabled"
+  end
+
+  ensure_native_task("Qt6 callback test executable build")
+  mkdir_p BIN_DIR
+
+  qt6_test_cxxflags =
+    BUILD[:qt6_cflags] +
+    [
+      "-Iinclude",
+      "-I#{CLAIR_INCLUDE_DIR}",
+      "-I#{CLAIR_GEN_DIR}",
+      "-I#{OBJ_DIR}",
+      "-I#{BUILD[:qt6_core_private_include_path]}",
+      "-I#{BUILD[:qt6_gui_private_include_path]}",
+      "-DQT_NO_KEYWORDS",
+      "-DCIM_BRIDGE_TEST=1",
+      "-std=c++17"
+    ]
+
+  sh_cmd(*([CXX] +
+           %w[-fPIC] +
+           qt6_test_cxxflags +
+           [
+             "tests/test-qt6-callback-delivery.cpp",
+             "modules/bridges/qt6/im-cim-qt.cpp"
+           ] +
+           BUILD[:qt6_libs] +
+           embedded_archive_link_flags +
+           CIM_LINK_LIBS +
+           CLAIR_LINK_CLOSURE +
+           clair_rpath_flags +
+           [
+             "-lpthread",
+             lib_rpath_flag,
+             "-o",
+             TEST_QT6_CALLBACK_EXE
+           ]))
+end
+
+file TEST_NESTED_HOST_EXE => [
+  NESTED_INNER_PLUGIN,
+  *NESTED_OUTER_MODULES.keys,
+  :nested_shared_cim,
+  "tests/test-nested-host.c"
+] do
+  unless NESTED_HOST_TEST_ENABLED
+    abort "nested host tests require static ELF embedding"
+  end
+
+  ensure_native_task("nested host test executable build")
+  mkdir_p BIN_DIR
+
+  sh_cmd(*([CC] +
+           TEST_CFLAGS +
+           ["tests/test-nested-host.c"] +
+           DYNAMIC_LOADER_LIBS +
+           [
+             "-lpthread",
+             "-o",
+             TEST_NESTED_HOST_EXE
+           ]))
+end
+
+test_executable_targets = [
   CIM_ADA_TEST_EXE,
   TEST_CIM_EXE,
   TEST_LIBHANGUL_EXE
 ]
+test_executable_targets << TEST_NESTED_HOST_EXE if NESTED_HOST_TEST_ENABLED
+test_executable_targets << TEST_GTK_PREEDIT_EXE if BUILD[:gtk3_enabled]
+test_executable_targets << TEST_GTK_CANDIDATE_EXE if BUILD[:gtk3_enabled]
+test_executable_targets << TEST_GTK_CALLBACK_EXE if BUILD[:gtk3_enabled]
+test_executable_targets << TEST_QT6_CALLBACK_EXE if BUILD[:qt6_enabled]
+
+desc "Build test executables"
+task :tests => test_executable_targets
 
 desc "Run the consolidated test suite"
 task :test do
@@ -1135,12 +1515,53 @@ task :test do
   Rake::Task[:build].invoke
 
   test_env = {
-    "CIM_TEST_PLUGIN_DIR" => File.expand_path(LIB_DIR)
+    "CIM_TEST_PLUGIN_DIR" => File.expand_path(LIB_DIR),
+    "CIM_TEST_CIM_EXECUTABLE" => File.expand_path(TEST_CIM_EXE),
+    "CIM_TEST_LIBHANGUL_EXECUTABLE" =>
+      File.expand_path(TEST_LIBHANGUL_EXE)
   }
 
-  sh "./#{CIM_ADA_TEST_EXE}"
-  sh test_env, "./#{TEST_CIM_EXE}"
-  sh test_env, "./#{TEST_LIBHANGUL_EXE}"
+  if NESTED_HOST_TEST_ENABLED
+    test_env["CIM_TEST_NESTED_HOST_EXECUTABLE"] =
+      File.expand_path(TEST_NESTED_HOST_EXE)
+    test_env["CIM_TEST_SHARED_CIM"] =
+      File.expand_path(NESTED_SHARED_CIM)
+  end
+
+  if BUILD[:gtk3_enabled]
+    test_env["CIM_TEST_GTK_PREEDIT_EXECUTABLE"] =
+      File.expand_path(TEST_GTK_PREEDIT_EXE)
+    test_env["CIM_TEST_GTK_CANDIDATE_EXECUTABLE"] =
+      File.expand_path(TEST_GTK_CANDIDATE_EXE)
+    test_env["CIM_TEST_GTK_CALLBACK_EXECUTABLE"] =
+      File.expand_path(TEST_GTK_CALLBACK_EXE)
+  end
+
+  if BUILD[:qt6_enabled]
+    test_env["CIM_TEST_QT6_CALLBACK_EXECUTABLE"] =
+      File.expand_path(TEST_QT6_CALLBACK_EXE)
+  end
+
+  if LIB_TYPE == "relocatable" || NESTED_HOST_TEST_ENABLED
+    library_path_name =
+      case TARGET_OS
+      when "darwin"
+        "DYLD_LIBRARY_PATH"
+      when "windows"
+        "PATH"
+      else
+        "LD_LIBRARY_PATH"
+      end
+
+    library_paths = [
+      File.expand_path(LIB_DIR),
+      File.expand_path(CLAIR_LIB_DIR),
+      ENV[library_path_name]
+    ].compact.reject(&:empty?)
+    test_env[library_path_name] = library_paths.join(File::PATH_SEPARATOR)
+  end
+
+  sh test_env, "./#{CIM_ADA_TEST_EXE}"
 end
 
 desc "Aggregates specified directories or files into a single output text file."
@@ -1189,7 +1610,7 @@ task :clean do
     puts "Warning: gprclean error: #{e.message}"
   end
 
-  rm_rf [OBJ_DIR, LIB_DIR, BIN_DIR]
+  rm_rf [OBJ_PROFILE_DIR, LIB_DIR, BIN_DIR]
 end
 
 desc "Rebuild everything"

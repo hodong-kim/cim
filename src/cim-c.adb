@@ -8,6 +8,106 @@ package body Cim.C is
 
   package C_Strings renames Interfaces.C.Strings;
 
+  ---------------------------------------------------------------------------
+  -- Private C implementation entry points
+  ---------------------------------------------------------------------------
+
+  function private_ic_create return CimIcHandle
+  with export,
+       convention    => c,
+       external_name => "cim_private_ic_create";
+
+  procedure private_ic_destroy (ic : CimIcHandle)
+  with export,
+       convention    => c,
+       external_name => "cim_private_ic_destroy";
+
+  procedure private_ic_focus_in (ic : CimIcHandle)
+  with export,
+       convention    => c,
+       external_name => "cim_private_ic_focus_in";
+
+  procedure private_ic_focus_out (ic : CimIcHandle)
+  with export,
+       convention    => c,
+       external_name => "cim_private_ic_focus_out";
+
+  procedure private_ic_reset (ic : CimIcHandle)
+  with export,
+       convention    => c,
+       external_name => "cim_private_ic_reset";
+
+  function private_ic_filter_event
+    (ic    : CimIcHandle;
+     event : CimEvent_Access)
+  return Interfaces.C.C_bool
+  with export,
+       convention    => c,
+       external_name => "cim_private_ic_filter_event";
+
+  procedure private_ic_set_cursor_pos
+    (ic   : CimIcHandle;
+     area : CimRect_Access)
+  with export,
+       convention    => c,
+       external_name => "cim_private_ic_set_cursor_pos";
+
+  procedure private_ic_set_callbacks
+    (ic        : CimIcHandle;
+     callbacks : CimCallbacks_Access;
+     user_data : System.Address)
+  with export,
+       convention    => c,
+       external_name => "cim_private_ic_set_callbacks";
+
+  function private_ic_get_preedit
+    (ic : CimIcHandle)
+  return CimPreedit_Access
+  with export,
+       convention    => c,
+       external_name => "cim_private_ic_get_preedit";
+
+  function private_ic_get_candidate
+    (ic : CimIcHandle)
+  return CimCandidate_Access
+  with export,
+       convention    => c,
+       external_name => "cim_private_ic_get_candidate";
+
+  procedure private_ic_activate_candidate_item
+    (ic  : CimIcHandle;
+     row : Interfaces.C.unsigned;
+     col : Interfaces.C.unsigned)
+  with export,
+       convention    => c,
+       external_name => "cim_private_ic_activate_candidate_item";
+
+  procedure private_ic_change_candidate_page
+    (ic         : CimIcHandle;
+     page_index : Interfaces.C.unsigned)
+  with export,
+       convention    => c,
+       external_name => "cim_private_ic_change_candidate_page";
+
+  function private_dup_plugin_path
+  return Interfaces.C.Strings.chars_ptr
+  with export,
+       convention    => c,
+       external_name => "cim_private_dup_plugin_path";
+
+  function private_get_last_error
+  return Error
+  with export,
+       convention    => c,
+       external_name => "cim_private_get_last_error";
+
+  function private_strerror
+    (err : Interfaces.C.unsigned)
+  return Interfaces.C.Strings.chars_ptr
+  with export,
+       convention    => c,
+       external_name => "cim_private_strerror";
+
   procedure cim_contract_violation_c
     (message : C_Strings.chars_ptr)
   with import,
@@ -99,50 +199,148 @@ package body Cim.C is
     C_Strings.New_String ("memory allocation failed");
 
   ---------------------------------------------------------------------------
-  -- Exported C API entry points
+  -- Published Ada API entry points
   ---------------------------------------------------------------------------
 
   function ic_create return CimIcHandle is
+  begin
+    return private_ic_create;
+  end ic_create;
+
+  procedure ic_destroy (ic : CimIcHandle) is
+  begin
+    private_ic_destroy (ic);
+  end ic_destroy;
+
+  procedure ic_focus_in (ic : CimIcHandle) is
+  begin
+    private_ic_focus_in (ic);
+  end ic_focus_in;
+
+  procedure ic_focus_out (ic : CimIcHandle) is
+  begin
+    private_ic_focus_out (ic);
+  end ic_focus_out;
+
+  procedure ic_reset (ic : CimIcHandle) is
+  begin
+    private_ic_reset (ic);
+  end ic_reset;
+
+  function ic_filter_event
+    (ic    : CimIcHandle;
+     event : CimEvent_Access)
+  return Interfaces.C.C_bool is
+  begin
+    return private_ic_filter_event (ic, event);
+  end ic_filter_event;
+
+  procedure ic_set_cursor_pos
+    (ic   : CimIcHandle;
+     area : CimRect_Access) is
+  begin
+    private_ic_set_cursor_pos (ic, area);
+  end ic_set_cursor_pos;
+
+  procedure ic_set_callbacks
+    (ic        : CimIcHandle;
+     callbacks : CimCallbacks_Access;
+     user_data : System.Address) is
+  begin
+    private_ic_set_callbacks (ic, callbacks, user_data);
+  end ic_set_callbacks;
+
+  function ic_get_preedit
+    (ic : CimIcHandle)
+  return CimPreedit_Access is
+  begin
+    return private_ic_get_preedit (ic);
+  end ic_get_preedit;
+
+  function ic_get_candidate
+    (ic : CimIcHandle)
+  return CimCandidate_Access is
+  begin
+    return private_ic_get_candidate (ic);
+  end ic_get_candidate;
+
+  procedure ic_activate_candidate_item
+    (ic  : CimIcHandle;
+     row : Interfaces.C.unsigned;
+     col : Interfaces.C.unsigned) is
+  begin
+    private_ic_activate_candidate_item (ic, row, col);
+  end ic_activate_candidate_item;
+
+  procedure ic_change_candidate_page
+    (ic         : CimIcHandle;
+     page_index : Interfaces.C.unsigned) is
+  begin
+    private_ic_change_candidate_page (ic, page_index);
+  end ic_change_candidate_page;
+
+  function dup_plugin_path return C_Strings.chars_ptr is
+  begin
+    return private_dup_plugin_path;
+  end dup_plugin_path;
+
+  function get_last_error return Error is
+  begin
+    return private_get_last_error;
+  end get_last_error;
+
+  function strerror
+    (err : Interfaces.C.unsigned)
+  return C_Strings.chars_ptr is
+  begin
+    return private_strerror (err);
+  end strerror;
+
+  ---------------------------------------------------------------------------
+  -- Private C implementation entry points
+  ---------------------------------------------------------------------------
+
+  function private_ic_create return CimIcHandle is
   begin
     return Cim.Runtime.ic_create;
   exception
     when others =>
       unhandled_exception ("cim_ic_create");
-  end ic_create;
+  end private_ic_create;
 
-  procedure ic_destroy (ic : CimIcHandle) is
+  procedure private_ic_destroy (ic : CimIcHandle) is
   begin
     Cim.Runtime.ic_destroy (ic);
   exception
     when others =>
       unhandled_exception ("cim_ic_destroy");
-  end ic_destroy;
+  end private_ic_destroy;
 
-  procedure ic_focus_in (ic : CimIcHandle) is
+  procedure private_ic_focus_in (ic : CimIcHandle) is
   begin
     Cim.Runtime.ic_focus_in (ic);
   exception
     when others =>
       unhandled_exception ("cim_ic_focus_in");
-  end ic_focus_in;
+  end private_ic_focus_in;
 
-  procedure ic_focus_out (ic : CimIcHandle) is
+  procedure private_ic_focus_out (ic : CimIcHandle) is
   begin
     Cim.Runtime.ic_focus_out (ic);
   exception
     when others =>
       unhandled_exception ("cim_ic_focus_out");
-  end ic_focus_out;
+  end private_ic_focus_out;
 
-  procedure ic_reset (ic : CimIcHandle) is
+  procedure private_ic_reset (ic : CimIcHandle) is
   begin
     Cim.Runtime.ic_reset (ic);
   exception
     when others =>
       unhandled_exception ("cim_ic_reset");
-  end ic_reset;
+  end private_ic_reset;
 
-  function ic_filter_event
+  function private_ic_filter_event
     (ic    : CimIcHandle;
      event : CimEvent_Access)
   return Interfaces.C.C_bool is
@@ -151,9 +349,9 @@ package body Cim.C is
   exception
     when others =>
       unhandled_exception ("cim_ic_filter_event");
-  end ic_filter_event;
+  end private_ic_filter_event;
 
-  procedure ic_set_cursor_pos
+  procedure private_ic_set_cursor_pos
     (ic   : CimIcHandle;
      area : CimRect_Access) is
   begin
@@ -161,9 +359,9 @@ package body Cim.C is
   exception
     when others =>
       unhandled_exception ("cim_ic_set_cursor_pos");
-  end ic_set_cursor_pos;
+  end private_ic_set_cursor_pos;
 
-  procedure ic_set_callbacks
+  procedure private_ic_set_callbacks
     (ic        : CimIcHandle;
      callbacks : CimCallbacks_Access;
      user_data : System.Address) is
@@ -172,17 +370,19 @@ package body Cim.C is
   exception
     when others =>
       unhandled_exception ("cim_ic_set_callbacks");
-  end ic_set_callbacks;
+  end private_ic_set_callbacks;
 
-  function ic_get_preedit (ic : CimIcHandle) return CimPreedit_Access is
+  function private_ic_get_preedit
+    (ic : CimIcHandle)
+  return CimPreedit_Access is
   begin
     return Cim.Runtime.ic_get_preedit (ic);
   exception
     when others =>
       unhandled_exception ("cim_ic_get_preedit");
-  end ic_get_preedit;
+  end private_ic_get_preedit;
 
-  function ic_get_candidate
+  function private_ic_get_candidate
     (ic : CimIcHandle)
   return CimCandidate_Access is
   begin
@@ -190,9 +390,9 @@ package body Cim.C is
   exception
     when others =>
       unhandled_exception ("cim_ic_get_candidate");
-  end ic_get_candidate;
+  end private_ic_get_candidate;
 
-  procedure ic_activate_candidate_item
+  procedure private_ic_activate_candidate_item
     (ic  : CimIcHandle;
      row : Interfaces.C.unsigned;
      col : Interfaces.C.unsigned) is
@@ -201,9 +401,9 @@ package body Cim.C is
   exception
     when others =>
       unhandled_exception ("cim_ic_activate_candidate_item");
-  end ic_activate_candidate_item;
+  end private_ic_activate_candidate_item;
 
-  procedure ic_change_candidate_page
+  procedure private_ic_change_candidate_page
     (ic         : CimIcHandle;
      page_index : Interfaces.C.unsigned) is
   begin
@@ -211,26 +411,26 @@ package body Cim.C is
   exception
     when others =>
       unhandled_exception ("cim_ic_change_candidate_page");
-  end ic_change_candidate_page;
+  end private_ic_change_candidate_page;
 
-  function dup_plugin_path return C_Strings.chars_ptr is
+  function private_dup_plugin_path return C_Strings.chars_ptr is
   begin
     Cim.Runtime.set_error (CIM_ERROR_NONE);
     return Cim.Runtime.dup_plugin_path;
   exception
     when others =>
       unhandled_exception ("cim_dup_plugin_path");
-  end dup_plugin_path;
+  end private_dup_plugin_path;
 
-  function get_last_error return Error is
+  function private_get_last_error return Error is
   begin
     return Cim.Runtime.get_error;
   exception
     when others =>
       unhandled_exception ("cim_get_last_error");
-  end get_last_error;
+  end private_get_last_error;
 
-  function strerror
+  function private_strerror
     (err : Interfaces.C.unsigned)
   return C_Strings.chars_ptr
   is
@@ -277,6 +477,6 @@ package body Cim.C is
   exception
     when others =>
       unhandled_exception ("cim_strerror");
-  end strerror;
+  end private_strerror;
 
 end Cim.C;

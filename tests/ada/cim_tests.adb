@@ -5,6 +5,8 @@
 -- ============================================================================
 with Clair.Test.Assertions;
 with Cim;
+with Cim.C;
+with Cim.Runtime;
 
 package body Cim_Tests is
 
@@ -55,9 +57,28 @@ package body Cim_Tests is
     Clair.Test.Assertions.assert_equal_natural
       (reporter => reporter,
        actual   => Natural(Cim.CIM_MICRO_VERSION),
-       expected => 0,
+       expected => 1,
        message  => "CIM micro version changed");
   end version_constants_match_api;
+
+  procedure published_ada_interfaces_link
+    (reporter : in out Clair.Test.Reporter.Context)
+  is
+  begin
+    Cim.Runtime.set_error (Cim.CIM_ERROR_NONE);
+
+    assert_error_representation
+      (reporter,
+       Cim.C.get_last_error,
+       0,
+       "Cim.C.get_last_error");
+
+    assert_error_representation
+      (reporter,
+       Cim.Runtime.get_error,
+       0,
+       "Cim.Runtime.get_error");
+  end published_ada_interfaces_link;
 
   procedure error_representations_match_abi
     (reporter : in out Clair.Test.Reporter.Context)
@@ -161,6 +182,11 @@ package body Cim_Tests is
       (reporter => reporter,
        name     => "version constants match the public API",
        runner   => version_constants_match_api'access);
+
+    Clair.Test.Reporter.run_scenario
+      (reporter => reporter,
+       name     => "published Ada interfaces remain linkable",
+       runner   => published_ada_interfaces_link'access);
   end run_version_suite;
 
   procedure run_error_abi_suite

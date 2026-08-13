@@ -5,6 +5,7 @@
  ******************************************************************************/
 #include "cim.h"
 #include "test-common.h"
+#include <clair.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -15,11 +16,14 @@ enum
 {
   CIM_KEY_space        = 0x020,
   CIM_KEY_1            = 0x031,
+  CIM_KEY_Hangul       = 0xff31,
   CIM_KEY_Hangul_Hanja = 0xff34
 };
 
 typedef struct
 {
+  bool failed;
+  bool saw_multibyte_preedit;
   int preedit_start_count;
   int preedit_end_count;
   int preedit_changed_count;
@@ -52,13 +56,65 @@ static void
 on_preedit_changed (CimIcHandle ic, const CimPreedit *preedit, void *user_data)
 {
   TestState *st = (TestState *) user_data;
+  size_t byte_count;
+  size_t scalar_count;
+
   (void) ic;
   st->preedit_changed_count++;
 
   if (preedit != NULL && preedit->text != NULL)
+  {
+    byte_count = strlen (preedit->text);
     printf ("[cb] preedit_changed: text=\"%s\" cursor=%u\n",
             preedit->text,
             preedit->cursor_pos);
+
+    if (clair_utf8_scalar_count
+          (preedit->text, byte_count, &scalar_count) != CLAIR_OK)
+    {
+      fprintf (stderr, "invalid UTF-8 preedit: \"%s\"\n", preedit->text);
+      st->failed = true;
+      return;
+    }
+
+    if (byte_count > scalar_count)
+      st->saw_multibyte_preedit = true;
+
+    if (preedit->cursor_pos != scalar_count)
+    {
+      fprintf (stderr,
+               "preedit cursor unit mismatch: text=\"%s\" cursor=%u "
+               "scalars=%zu\n",
+               preedit->text,
+               preedit->cursor_pos,
+               scalar_count);
+      st->failed = true;
+    }
+
+    if (preedit->attrs_len != 0 && preedit->attrs == NULL)
+    {
+      fprintf (stderr, "preedit attributes are null\n");
+      st->failed = true;
+      return;
+    }
+
+    for (uint32_t index = 0; index < preedit->attrs_len; index++)
+    {
+      uint64_t end = (uint64_t) preedit->attrs[index].pos +
+                     preedit->attrs[index].n_chars;
+
+      if (end > scalar_count)
+      {
+        fprintf (stderr,
+                 "preedit attribute range exceeds scalar count: "
+                 "pos=%u length=%u scalars=%zu\n",
+                 preedit->attrs[index].pos,
+                 preedit->attrs[index].n_chars,
+                 scalar_count);
+        st->failed = true;
+      }
+    }
+  }
   else
     printf ("[cb] preedit_changed: (null)\n");
 }
@@ -197,9 +253,6 @@ main (void)
   CimCallbacks cb;
   TestState st;
 
-  if (test_initialize_cim_runtime () != 0)
-    return EXIT_FAILURE;
-
   if (test_set_plugin_env ("lib/im-libhangul.so") != 0)
     return 1;
 
@@ -226,6 +279,8 @@ main (void)
   }
 
   cim_ic_set_callbacks (ic, &cb, &st);
+
+  send_key (ic, CIM_KEY_Hangul, 0, 0);
 
   /*
    * 2-set Korean keycodes in your plugin mapping:
@@ -274,5 +329,11 @@ main (void)
   printf ("candidate_changed  = %d\n", st.candidate_changed_count);
   printf ("candidate_selected = %d\n", st.candidate_selected_count);
 
-  return 0;
+  if (!st.saw_multibyte_preedit)
+  {
+    fprintf (stderr, "no multibyte preedit was observed\n");
+    st.failed = true;
+  }
+
+  return st.failed ? EXIT_FAILURE : EXIT_SUCCESS;
 }

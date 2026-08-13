@@ -22,6 +22,7 @@
  * simplified for readability. Real-world implementations should
  * include more robust handling of failures (e.g. memory allocation).
  */
+#include <clair.h>
 #include <hangul.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,72 +63,54 @@ string_from_int (int value)
   return strdup (buf);
 }
 
-static uint32_t
-utf8_strlen_chars (const char *s)
+static bool
+utf8_scalar_count (const char *text, uint32_t *result)
 {
-  uint32_t n = 0;
+  size_t byte_length;
+  size_t count;
 
-  if (s == NULL)
-    return 0;
+  if (text == NULL || result == NULL)
+    return false;
 
-  while (*s != '\0')
-  {
-    unsigned char c = (unsigned char) *s;
+  byte_length = strlen (text);
 
-    if ((c & 0xc0U) != 0x80U)
-      n++;
+  if (clair_utf8_scalar_count (text, byte_length, &count) != CLAIR_OK ||
+      count > UINT32_MAX)
+    return false;
 
-    s++;
-  }
-
-  return n;
+  *result = (uint32_t) count;
+  return true;
 }
 
-static const char *
-utf8_offset_to_pointer (const char *s, uint32_t offset)
+static bool
+utf8_copy_scalar_at (char dst[5],
+                     const char *text,
+                     size_t text_length,
+                     uint32_t scalar_offset)
 {
-  uint32_t i = 0;
+  size_t start_offset;
+  size_t end_offset;
+  size_t scalar_length;
 
-  if (s == NULL)
-    return NULL;
+  if (dst == NULL || (text == NULL && text_length != 0))
+    return false;
 
-  while (*s != '\0')
-  {
-    unsigned char c = (unsigned char) *s;
+  dst[0] = '\0';
 
-    if ((c & 0xc0U) != 0x80U)
-    {
-      if (i == offset)
-        return s;
-      i++;
-    }
+  if (clair_utf8_scalar_offset_to_byte_offset
+        (text, text_length, scalar_offset, &start_offset) != CLAIR_OK ||
+      start_offset >= text_length ||
+      clair_utf8_next_offset
+        (text, text_length, start_offset, &end_offset) != CLAIR_OK)
+    return false;
 
-    s++;
-  }
+  scalar_length = end_offset - start_offset;
+  if (scalar_length > 4)
+    return false;
 
-  return s;
-}
-
-static void
-utf8_copy_one_char (char *dst, const char *src)
-{
-  size_t i = 0;
-
-  if (dst == NULL)
-    return;
-
-  if (src == NULL || *src == '\0')
-  {
-    dst[0] = '\0';
-    return;
-  }
-
-  do {
-    dst[i] = src[i];
-    i++;
-  } while ((src[i] & 0xc0) == 0x80);
-
-  dst[i] = '\0';
+  memcpy (dst, text + start_offset, scalar_length);
+  dst[scalar_length] = '\0';
+  return true;
 }
 
 static char *
@@ -136,62 +119,44 @@ ucs_to_utf8 (const ucschar *src)
   size_t len = 0;
   char *out;
   char *dst;
+  char encoded[4];
+  size_t encoded_length;
   const ucschar *p;
 
   if (src == NULL)
     return NULL;
 
-  p = src;
-
-  while (*p != 0)
+  for (p = src; *p != 0; p++)
   {
-    uint32_t ch = (uint32_t) *p;
-
-    if (ch <= 0x7fU)
-      len += 1;
-    else if (ch <= 0x7ffU)
-      len += 2;
-    else if (ch <= 0xffffU)
-      len += 3;
-    else if (ch <= 0x10ffffU)
-      len += 4;
-    else
+    if (clair_utf8_encode ((uint32_t) *p,
+                           encoded,
+                           &encoded_length) != CLAIR_OK ||
+        encoded_length > SIZE_MAX - len)
       return NULL;
 
-    p++;
+    len += encoded_length;
   }
+
+  if (len == SIZE_MAX)
+    return NULL;
 
   out = malloc (len + 1);
   if (out == NULL)
     return NULL;
 
-  p = src;
   dst = out;
-  while (*p != 0)
+  for (p = src; *p != 0; p++)
   {
-    uint32_t ch = (uint32_t) *p;
+    if (clair_utf8_encode ((uint32_t) *p,
+                           encoded,
+                           &encoded_length) != CLAIR_OK)
+    {
+      free (out);
+      return NULL;
+    }
 
-    if (ch <= 0x7fU)
-      *dst++ = (char) ch;
-    else if (ch <= 0x7ffU)
-    {
-      *dst++ = (char) (0xc0U | (ch >> 6));
-      *dst++ = (char) (0x80U | (ch & 0x3fU));
-    }
-    else if (ch <= 0xffffU)
-    {
-      *dst++ = (char) (0xe0U | (ch >> 12));
-      *dst++ = (char) (0x80U | ((ch >> 6) & 0x3fU));
-      *dst++ = (char) (0x80U | (ch & 0x3fU));
-    }
-    else
-    {
-      *dst++ = (char) (0xf0U | (ch >> 18));
-      *dst++ = (char) (0x80U | ((ch >> 12) & 0x3fU));
-      *dst++ = (char) (0x80U | ((ch >> 6) & 0x3fU));
-      *dst++ = (char) (0x80U | (ch & 0x3fU));
-    }
-    p++;
+    memcpy (dst, encoded, encoded_length);
+    dst += encoded_length;
   }
 
   *dst = '\0';
@@ -494,7 +459,7 @@ static int         hangul_hanja_table_ref_count;
 
 static void hangul_candidate_free (Hangul* hangul);
 static void hangul_candidate_commit (Hangul* hangul, const char* text);
-static void hangul_replace_preedit_text (Hangul *hangul, char *text);
+static bool hangul_replace_preedit_text (Hangul *hangul, char *text);
 static bool hangul_candidate_select_by_digit (Hangul *hangul, uint32_t keyval);
 static void hangul_candidate_update (Hangul *hangul);
 static void hangul_update_preedit (Hangul* hangul, char* new_preedit);
@@ -601,16 +566,25 @@ dup_empty_string (void)
   return strdup ("");
 }
 
-static void
+static bool
 hangul_replace_preedit_text (Hangul *hangul, char *text)
 {
+  uint32_t cursor_pos;
+
   if (text == NULL)
-    return;
+    return false;
+
+  if (!utf8_scalar_count (text, &cursor_pos))
+  {
+    free (text);
+    return false;
+  }
 
   free (hangul->preedit.text);
   hangul->preedit.text = text;
-  hangul->preedit.cursor_pos = utf8_strlen_chars (hangul->preedit.text);
+  hangul->preedit.cursor_pos = cursor_pos;
   hangul->preedit.attrs[0].n_chars = hangul->preedit.cursor_pos;
+  return true;
 }
 
 static bool
@@ -754,7 +728,9 @@ hangul_update_preedit (Hangul* hangul, char* new_preedit)
   /* preedit-changed */
   if (hangul->preedit.text[0] != 0 || new_preedit[0] != 0)
   {
-    hangul_replace_preedit_text (hangul, new_preedit);
+    if (!hangul_replace_preedit_text (hangul, new_preedit))
+      return;
+
     hangul_call_preedit_changed (hangul);
   }
   else
@@ -1213,10 +1189,11 @@ hangul_filter_event (CimIcHandle ic, const CimEvent* event)
         {
           if (surround->len != 0U && surround->cursor_pos > 0U)
           {
-            const char* p = utf8_offset_to_pointer (surround->text,
-                                                    surround->cursor_pos - 1U);
-            utf8_copy_one_char (item, p);
-            key = item;
+            if (utf8_copy_scalar_at (item,
+                                     surround->text,
+                                     surround->len,
+                                     surround->cursor_pos - 1U))
+              key = item;
           }
         }
       }
@@ -1507,7 +1484,7 @@ hangul_create (void)
   return hangul;
 }
 
-CimIcVTable vtable = {
+static CimIcVTable vtable = {
   .create                  = hangul_create,
   .destroy                 = hangul_destroy,
   .filter_event            = hangul_filter_event,

@@ -19,10 +19,16 @@
 #include <dlfcn.h>
 #include <pthread.h>
 
+#ifdef CIM_HAS_INTERNAL_TEST_HOOK
 extern void cim_unhandled_exception_c (const char *operation);
+#endif
 
 #define UNHANDLED_EXCEPTION_MODE          "--unhandled-exception"
-#define PLUGIN_STATE_UNDERFLOW_MODE       "--plugin-state-underflow"
+#define STALE_DESTROY_MODE                "--stale-destroy"
+#ifdef CIM_HAS_PLUGIN_REENTRY_TEST
+#define PLUGIN_INIT_REENTRY_MODE           "--plugin-init-reentry"
+#define PLUGIN_FINI_REENTRY_MODE           "--plugin-fini-reentry"
+#endif
 #define STRERROR_INVALID_MODE              "--strerror-invalid"
 #define CONTRACT_NULL_MODE                "--contract-null"
 #define CONTRACT_DESTROY                  "destroy"
@@ -251,6 +257,14 @@ expect_error_value (const char *name,
 }
 
 static int
+test_automatic_runtime_initialization (void)
+{
+  return expect_error_value ("test_automatic_runtime_initialization",
+                             cim_get_last_error (),
+                             CIM_ERROR_NONE);
+}
+
+static int
 expect_create_failure (const char *name,
                        const char *plugin,
                        CimError expected_error)
@@ -315,6 +329,7 @@ run_strerror_invalid_mode (void)
   return EXIT_FAILURE;
 }
 
+#ifdef CIM_HAS_INTERNAL_TEST_HOOK
 static int
 run_unhandled_exception_mode (void)
 {
@@ -324,14 +339,14 @@ run_unhandled_exception_mode (void)
   cim_unhandled_exception_c ("test-cim");
   return EXIT_FAILURE;
 }
+#endif
 
 static int
-run_plugin_state_underflow_mode (void)
+run_stale_destroy_mode (void)
 {
   CimIcHandle ic;
 
-  if (disable_core_dumps
-        ("run_plugin_state_underflow_mode: setrlimit") != 0)
+  if (disable_core_dumps ("run_stale_destroy_mode: setrlimit") != 0)
     return EXIT_FAILURE;
 
   if (test_set_plugin_env ("lib/im-noop-destroy.so") != 0)
@@ -340,21 +355,59 @@ run_plugin_state_underflow_mode (void)
   ic = cim_ic_create ();
   if (ic == NULL)
   {
-    fprintf (stderr,
-             "run_plugin_state_underflow_mode: cim_ic_create() failed\n");
+    fprintf (stderr, "run_stale_destroy_mode: cim_ic_create() failed\n");
     return EXIT_FAILURE;
   }
 
   cim_ic_destroy (ic);
 
-  /* The no-op destroy callback makes this stale-handle call deterministic.
-   * Without the invariant check, the second internal unref is silently
-   * ignored even though no persistent context reference exists.
+  /* The no-op destroy callback avoids freeing heap storage, making the stale
+   * pointer value deterministic without dereferencing it.
    */
   cim_ic_destroy (ic);
 
   return EXIT_FAILURE;
 }
+
+#ifdef CIM_HAS_PLUGIN_REENTRY_TEST
+static int
+run_plugin_init_reentry_mode (void)
+{
+  if (disable_core_dumps
+        ("run_plugin_init_reentry_mode: setrlimit") != 0)
+    return EXIT_FAILURE;
+
+  if (test_set_plugin_env ("lib/im-reentrant-init.so") != 0)
+    return EXIT_FAILURE;
+
+  (void) cim_ic_create ();
+  return EXIT_FAILURE;
+}
+
+static int
+run_plugin_fini_reentry_mode (void)
+{
+  CimIcHandle ic;
+
+  if (disable_core_dumps
+        ("run_plugin_fini_reentry_mode: setrlimit") != 0)
+    return EXIT_FAILURE;
+
+  if (test_set_plugin_env ("lib/im-reentrant-fini.so") != 0)
+    return EXIT_FAILURE;
+
+  ic = cim_ic_create ();
+  if (ic == NULL)
+  {
+    fprintf (stderr,
+             "run_plugin_fini_reentry_mode: cim_ic_create() failed\n");
+    return EXIT_FAILURE;
+  }
+
+  cim_ic_destroy (ic);
+  return EXIT_FAILURE;
+}
+#endif
 
 static int
 run_null_contract_mode (const char *operation)
@@ -642,6 +695,7 @@ test_null_contract_violation (const char *executable_path,
                               operation);
 }
 
+#ifdef CIM_HAS_INTERNAL_TEST_HOOK
 static int
 test_unhandled_exception_abort (const char *executable_path)
 {
@@ -649,14 +703,36 @@ test_unhandled_exception_abort (const char *executable_path)
                               UNHANDLED_EXCEPTION_MODE,
                               NULL);
 }
+#endif
 
 static int
-test_plugin_state_underflow_abort (const char *executable_path)
+test_stale_destroy_abort (const char *executable_path)
 {
-  return test_expected_abort (executable_path,
-                              PLUGIN_STATE_UNDERFLOW_MODE,
-                              NULL);
+  return test_expected_abort_message
+    (executable_path,
+     STALE_DESTROY_MODE,
+     "Cim contract violation: "
+     "Cim input context operation requires a ready plugin");
 }
+
+#ifdef CIM_HAS_PLUGIN_REENTRY_TEST
+static int
+test_plugin_lifecycle_reentry_abort (const char *executable_path)
+{
+  static const char diagnostic[] =
+    "Cim contract violation: "
+    "Cim plugin lifecycle callback re-entered Cim";
+  int retval = 0;
+
+  retval |= test_expected_abort_message (executable_path,
+                                         PLUGIN_INIT_REENTRY_MODE,
+                                         diagnostic);
+  retval |= test_expected_abort_message (executable_path,
+                                         PLUGIN_FINI_REENTRY_MODE,
+                                         diagnostic);
+  return retval;
+}
+#endif
 
 static int
 test_strerror_invalid_error_abort (const char *executable_path)
@@ -1316,18 +1392,99 @@ test_dummy_create_race (void)
   return 0;
 }
 
+enum
+{
+  FAILURE_RACE_THREAD_COUNT = 16
+};
+
+struct failure_race_result
+{
+  int failures;
+};
+
+static void *
+init_failure_race_worker (void *data)
+{
+  struct failure_race_result *result =
+    (struct failure_race_result *) data;
+  CimIcHandle ic = cim_ic_create ();
+
+  if (ic != NULL)
+  {
+    cim_ic_destroy (ic);
+    __sync_fetch_and_add (&result->failures, 1);
+    return NULL;
+  }
+
+  if (cim_get_last_error () != CIM_ERROR_INIT_FAILED)
+    __sync_fetch_and_add (&result->failures, 1);
+
+  return NULL;
+}
+
+static int
+test_init_failure_race (void)
+{
+  pthread_t threads[FAILURE_RACE_THREAD_COUNT];
+  struct failure_race_result result;
+
+  memset (&result, 0, sizeof (result));
+
+  if (test_set_plugin_env ("lib/im-init-fail.so") != 0)
+    return 1;
+
+  for (int i = 0; i < FAILURE_RACE_THREAD_COUNT; ++i)
+  {
+    if (pthread_create
+          (&threads[i], NULL, init_failure_race_worker, &result) != 0)
+    {
+      fprintf (stderr,
+               "test_init_failure_race: pthread_create() failed\n");
+      return 1;
+    }
+  }
+
+  for (int i = 0; i < FAILURE_RACE_THREAD_COUNT; ++i)
+  {
+    if (pthread_join (threads[i], NULL) != 0)
+    {
+      fprintf (stderr,
+               "test_init_failure_race: pthread_join() failed\n");
+      return 1;
+    }
+  }
+
+  if (result.failures != 0)
+  {
+    fprintf (stderr,
+             "test_init_failure_race: %d operations failed\n",
+             result.failures);
+    return 1;
+  }
+
+  printf ("test_init_failure_race: OK\n");
+  return 0;
+}
+
 int main (int argc, char *argv[])
 {
   int retval = 0;
 
-  if (test_initialize_cim_runtime () != 0)
-    return EXIT_FAILURE;
-
+#ifdef CIM_HAS_INTERNAL_TEST_HOOK
   if (argc == 2 && strcmp (argv[1], UNHANDLED_EXCEPTION_MODE) == 0)
     return run_unhandled_exception_mode ();
+#endif
 
-  if (argc == 2 && strcmp (argv[1], PLUGIN_STATE_UNDERFLOW_MODE) == 0)
-    return run_plugin_state_underflow_mode ();
+#ifdef CIM_HAS_PLUGIN_REENTRY_TEST
+  if (argc == 2 && strcmp (argv[1], PLUGIN_INIT_REENTRY_MODE) == 0)
+    return run_plugin_init_reentry_mode ();
+
+  if (argc == 2 && strcmp (argv[1], PLUGIN_FINI_REENTRY_MODE) == 0)
+    return run_plugin_fini_reentry_mode ();
+#endif
+
+  if (argc == 2 && strcmp (argv[1], STALE_DESTROY_MODE) == 0)
+    return run_stale_destroy_mode ();
 
   if (argc == 2 && strcmp (argv[1], STRERROR_INVALID_MODE) == 0)
     return run_strerror_invalid_mode ();
@@ -1335,8 +1492,14 @@ int main (int argc, char *argv[])
   if (argc == 3 && strcmp (argv[1], CONTRACT_NULL_MODE) == 0)
     return run_null_contract_mode (argv[2]);
 
+  retval |= test_automatic_runtime_initialization ();
+#ifdef CIM_HAS_INTERNAL_TEST_HOOK
   retval |= test_unhandled_exception_abort (argv[0]);
-  retval |= test_plugin_state_underflow_abort (argv[0]);
+#endif
+  retval |= test_stale_destroy_abort (argv[0]);
+#ifdef CIM_HAS_PLUGIN_REENTRY_TEST
+  retval |= test_plugin_lifecycle_reentry_abort (argv[0]);
+#endif
   retval |= test_strerror_invalid_error_abort (argv[0]);
   retval |= test_dlclose_error_string ();
   retval |= test_null_contract_violation (argv[0], CONTRACT_DESTROY);
@@ -1377,6 +1540,7 @@ int main (int argc, char *argv[])
   retval |= test_input_context_error_reset ();
   retval |= test_dummy_get_info ();
   retval |= test_init_fail_get_info ();
+  retval |= test_init_failure_race ();
   retval |= test_dummy_create_race ();
 
   test_unset_plugin_env ();
